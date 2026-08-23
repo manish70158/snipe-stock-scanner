@@ -31,9 +31,11 @@ jobs:
         run: |
           # Run scan and capture JSON output
           snipe scan --json > scan_result.json
+          echo "Scan complete. Result:"
+          cat scan_result.json | python3 -c "import json,sys; d=json.load(sys.stdin); print(f'Watchlist: {len(d.get(\"watchlist\",[]))} stocks')"
 
-          # Also run regime check
-          snipe regime --json > regime_result.json
+          # Also run regime check (non-critical)
+          snipe regime --json > regime_result.json 2>/dev/null || echo '{}' > regime_result.json
 
       - name: Format and send Telegram message
         env:

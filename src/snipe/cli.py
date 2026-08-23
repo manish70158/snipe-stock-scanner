@@ -37,14 +37,16 @@ def scan(output_json, equity):
 
     config = load_config()
 
-    console.print("[bold blue]SNIPE Scan[/bold blue] - Running full pipeline...")
+    if not output_json:
+        console.print("[bold blue]SNIPE Scan[/bold blue] - Running full pipeline...")
 
     # Determine regime first
     # For now, default to "green" — full regime detection requires loaded data
     regime = "green"
 
     def progress(stage, count):
-        console.print(f"  Stage: {stage} → {count} stocks", style="dim")
+        if not output_json:
+            console.print(f"  Stage: {stage} → {count} stocks", style="dim")
 
     try:
         result = run_pipeline(
@@ -54,8 +56,11 @@ def scan(output_json, equity):
             progress_callback=progress,
         )
     except Exception as e:
-        console.print(f"[red]Error running pipeline:[/red] {e}")
-        console.print("Make sure you have loaded data first. Run: snipe fetch")
+        if output_json:
+            click.echo(json_lib.dumps({"error": str(e)}))
+        else:
+            console.print(f"[red]Error running pipeline:[/red] {e}")
+            console.print("Make sure you have loaded data first. Run: snipe fetch")
         return
 
     if output_json:
@@ -117,7 +122,8 @@ def regime(output_json):
     from snipe.scoring.regime import classify_regime, assess_index_trend
     from snipe.data.fii_dii import compute_rolling_fii_flow
 
-    console.print("[bold blue]Market Regime Assessment[/bold blue]")
+    if not output_json:
+        console.print("[bold blue]Market Regime Assessment[/bold blue]")
 
     fii_flow = compute_rolling_fii_flow()
 
@@ -150,15 +156,20 @@ def inspect(symbol, output_json):
     config = load_config()
     symbol = symbol.upper()
 
-    console.print(f"[bold blue]Inspecting: {symbol}[/bold blue]")
+    if not output_json:
+        console.print(f"[bold blue]Inspecting: {symbol}[/bold blue]")
 
     # Try to get from DB first, then fetch live
     df = get_stock_prices(symbol)
     if df.empty:
-        console.print("Fetching live data...", style="dim")
+        if not output_json:
+            console.print("Fetching live data...", style="dim")
         df = fetch_stock_prices(symbol)
         if df.empty:
-            console.print(f"[red]No data available for {symbol}[/red]")
+            if output_json:
+                click.echo(json_lib.dumps({"error": f"No data available for {symbol}"}))
+            else:
+                console.print(f"[red]No data available for {symbol}[/red]")
             return
         store_prices(df)
 
