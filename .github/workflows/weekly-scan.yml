@@ -75,29 +75,78 @@ jobs:
           if not watchlist:
               msg += "⚠️ No candidates found this week.\n"
           else:
-              msg += "<b>🎯 Watchlist:</b>\n\n"
+              # Summary table
+              msg += "<b>🎯 Watchlist Summary:</b>\n"
+              msg += "<pre>\n"
+              msg += f"{'#':<2} {'Symbol':<10} {'CMP':<6} {'Entry':<6} {'SL':<6} {'T1':<6} {'T2':<6}\n"
+              msg += "-" * 50 + "\n"
               for item in watchlist:
-                  symbol = item['symbol']
-                  sector = item.get('sector', 'Unknown')
-                  edges_str = ", ".join(item.get("edges", []))
                   sizing = item.get("position_sizing", {})
-                  shares = sizing.get("shares", "N/A")
-                  risk_pct = sizing.get("risk_percent", "N/A")
-
-                  # Targets from position sizing
                   t1 = sizing.get("target_1", 0)
                   t2 = sizing.get("target_2", 0)
-                  t3 = sizing.get("target_3", 0)
+                  msg += (
+                      f"{item.get('rank', ''):<2} "
+                      f"{item['symbol']:<10} "
+                      f"{item.get('current_price', 0):<6.0f} "
+                      f"{item.get('pivot_price', 0):<6.0f} "
+                      f"{item.get('stop_price', 0):<6.0f} "
+                      f"{t1:<6.0f} "
+                      f"{t2:<6.0f}\n"
+                  )
+              msg += "</pre>\n\n"
 
-                  msg += f"<b>{item.get('rank', '')}. {symbol}</b> ({sector})\n"
-                  msg += f"   Score: {item.get('composite_score', 0):.0f} | Edges: {item.get('edge_count', 0)} [{edges_str}]\n"
-                  msg += f"   CMP: Rs.{item.get('current_price', 0):.0f}\n"
-                  msg += f"   <b>Entry:</b> Rs.{item.get('pivot_price', 0):.0f}\n"
-                  msg += f"   <b>SL:</b> Rs.{item.get('stop_price', 0):.0f} ({sizing.get('stop_distance_pct', 0):.1f}%)\n"
-                  if t1:
-                      msg += f"   <b>T1:</b> Rs.{t1:.0f} | <b>T2:</b> Rs.{t2:.0f} | <b>T3:</b> Rs.{t3:.0f}\n"
-                  msg += f"   Qty: {shares} shares | Risk: {risk_pct}%\n"
-                  msg += "\n"
+              # Scoring metrics table
+              msg += "<b>📈 Scoring Metrics:</b>\n"
+              msg += "<pre>\n"
+              msg += f"{'#':<2} {'Symbol':<10} {'Score':<6} {'TT':<5} {'VCP':<5} {'CAN':<4} {'RS%':<5} {'Edg':<4}\n"
+              msg += "-" * 45 + "\n"
+              for item in watchlist:
+                  msg += (
+                      f"{item.get('rank', ''):<2} "
+                      f"{item['symbol']:<10} "
+                      f"{item.get('composite_score', 0):<6.0f} "
+                      f"{item.get('trend_template_score', 0):<2}/10 "
+                      f"{item.get('vcp_quality', 0):<2.0f}/10 "
+                      f"{item.get('canslim_score', 0):<1}/7 "
+                      f"{item.get('volume_ratio', 0):<5.1f} "
+                      f"{item.get('edge_count', 0):<4}\n"
+                  )
+              msg += "</pre>\n\n"
+
+              # Position sizing table
+              msg += "<b>💰 Position Sizing:</b>\n"
+              msg += "<pre>\n"
+              msg += f"{'#':<2} {'Symbol':<10} {'Qty':<6} {'Value':<8} {'Risk%':<6} {'R:R':<4}\n"
+              msg += "-" * 40 + "\n"
+              for item in watchlist:
+                  sizing = item.get("position_sizing", {})
+                  if sizing.get("valid"):
+                      msg += (
+                          f"{item.get('rank', ''):<2} "
+                          f"{item['symbol']:<10} "
+                          f"{sizing.get('shares', 0):<6} "
+                          f"{sizing.get('position_value', 0):<8.0f} "
+                          f"{sizing.get('risk_percent', 0):<6.1f} "
+                          f"{sizing.get('risk_reward_ratio', 0):<4.1f}\n"
+                      )
+                  else:
+                      msg += (
+                          f"{item.get('rank', ''):<2} "
+                          f"{item['symbol']:<10} "
+                          f"{'--':<6} "
+                          f"{'--':<8} "
+                          f"{'--':<6} "
+                          f"{sizing.get('reason', 'N/A')}\n"
+                      )
+              msg += "</pre>\n\n"
+
+              # Edges detail
+              msg += "<b>🔑 Edges Detail:</b>\n"
+              for item in watchlist:
+                  edges_str = ", ".join(item.get("edges", [])) or "none"
+                  stage = item.get("stage", "?")
+                  bo = "BO" if item.get("breakout_detected") else "Near" if item.get("approaching_breakout") else "Wait"
+                  msg += f"  {item.get('rank', '')}. <b>{item['symbol']}</b>: [{edges_str}] | {stage} | {bo}\n"
 
           msg += f"\n<i>Scan completed at {datetime.now().strftime('%H:%M UTC')}</i>"
 
