@@ -1,4 +1,11 @@
-"""SNIPE Pipeline Orchestrator — full scan from universe to watchlist."""
+"""SNIPE Pipeline Orchestrator — follows the S.N.I.P.E. Complete Process Map.
+
+S — SCAN: Cast wide net. Nifty 500 → Filter(Vol, EPS, RS) → Trend Template
+N — NARROW: Shortlist top 5-7. Leading sectors → Clean chart patterns → Not extended
+I — IDENTIFY EDGES: HV1, HVE, RS Edge → N-Factor → VCP quality
+P — PLAN THE TRADE: Entry, SL, Target → Position size by edges
+E — EXECUTE: Limit orders, respect stop, journal
+"""
 
 from datetime import datetime
 from pathlib import Path
@@ -29,19 +36,17 @@ def run_pipeline(
     config: dict | None = None,
     progress_callback=None,
 ) -> dict:
-    """Run the full SNIPE scan pipeline.
+    """Run the full S.N.I.P.E. scan pipeline per framework PDF.
 
-    Stages:
-    1. Universe Filter (Nifty 500)
-    2. Technical Pre-Screen (Trend Template pass)
-    3. Pattern Detection (VCP + proximity to pivot)
-    4. Fundamental Screen (CANSLIM score >= 5)
-    5. Edge Scoring
-    6. Final Narrowing (top 5-7, sector diversification)
+    S — SCAN:     Universe → Filters(Price, Vol, MCap) → RS ranking → Trend Template
+    N — NARROW:   Leading sectors → Clean chart (VCP/base) → Not extended → Max 5-7
+    I — IDENTIFY: Edge scoring (HV1, HVE, RS, N-Factor, Bonus) + VCP quality
+    P — PLAN:     Entry/Stop/Target/Position sizing by edge count
+    E — EXECUTE:  Output formatted for limit orders + journaling
 
     Args:
         account_equity: Account size for position sizing.
-        regime: Current market regime.
+        regime: Current market regime ("green", "yellow", "red").
         db_path: Optional database path.
         config: Optional config.
         progress_callback: Optional callable(stage, count).
@@ -52,7 +57,11 @@ def run_pipeline(
     if config is None:
         config = load_config()
 
-    # Stage 1: Get universe
+    # ═══════════════════════════════════════════════════════════════════════
+    # S — SCAN: Cast a wide but structured net
+    # ═══════════════════════════════════════════════════════════════════════
+
+    # S.1: Get universe (Nifty 500)
     universe = get_universe(db_path)
     symbols = [s["symbol"] for s in universe]
     sector_map = {s["symbol"]: s["sector"] for s in universe}
@@ -62,7 +71,7 @@ def run_pipeline(
     if progress_callback:
         progress_callback("universe", len(symbols))
 
-    # Load all price data and apply universe filters (PDF Page 5)
+    # S.2: Apply universe filters (PDF Page 5: Vol, EPS, RS)
     uni_config = config.get("universe", {})
     min_price = uni_config.get("min_price", 50)
     min_market_cap_cr = uni_config.get("min_market_cap_cr", 2000)
@@ -81,21 +90,20 @@ def run_pipeline(
         volume = df["volume"].astype(float)
         current_price = float(close.iloc[-1])
 
-        # Filter: Price > ₹50 (avoid penny stocks)
+        # Filter: Price > ₹50 (avoid penny stocks — operator manipulation, wide spreads)
         if current_price < min_price:
             continue
 
         # Filter: Market Cap > ₹2,000 Cr (if available in DB)
-        # Approximate market cap from price × shares_outstanding (stored in universe DB)
         mcap_info = next((s for s in universe if s["symbol"] == symbol), None)
         if mcap_info and mcap_info.get("market_cap"):
-            mcap_cr = mcap_info["market_cap"] / 1e7  # stored in absolute, convert to Cr
+            mcap_cr = mcap_info["market_cap"] / 1e7
             if mcap_cr < min_market_cap_cr:
                 continue
 
-        # Filter: Liquidity — avg daily volume > 5 lakh OR avg turnover > ₹10 Cr
+        # Filter: Liquidity — avg daily volume > 5L shares OR avg turnover > ₹10 Cr
         avg_vol_50d = float(volume.tail(50).mean())
-        avg_turnover_cr = (avg_vol_50d * current_price) / 1e7  # ₹ crore
+        avg_turnover_cr = (avg_vol_50d * current_price) / 1e7
         if avg_vol_50d < min_avg_vol and avg_turnover_cr < min_avg_turnover_cr:
             continue
 
@@ -107,7 +115,7 @@ def run_pipeline(
             ret_6m = (close.iloc[-1] / close.iloc[0] - 1) * 100
         stock_returns[symbol] = ret_6m
 
-    # Compute dual-timeframe RS (PDF: must outperform BOTH 3-month AND 6-month)
+    # S.3: Compute dual-timeframe RS (PDF: must outperform BOTH 3-month AND 6-month)
     stock_returns_3m = {}
     for symbol, df in stocks_data.items():
         close = df["close"].astype(float)
@@ -126,12 +134,12 @@ def run_pipeline(
         rs_3m = rs_percentiles_3m.get(symbol, 50.0)
         rs_percentiles[symbol] = min(rs_6m, rs_3m)
 
-    # Compute sector leadership from stock returns
-    sector_top_pct = config.get("edge_scoring", {}).get("sector_leader_top_pct", 30)
+    # S.4: Compute sector leadership (PDF Page 19: sector RS in top 25%)
+    sector_top_pct = config.get("edge_scoring", {}).get("sector_leader_top_pct", 25)
     sector_rankings = compute_sector_rankings(stock_returns, sector_map, top_pct=sector_top_pct)
     leading_sectors = sector_rankings["leading_sectors"]
 
-    # Stage 2: Trend Template Pre-Screen
+    # S.5: Trend Template (10-criteria SEPA check — ALL must pass)
     tt_passing = []
     for symbol, df in stocks_data.items():
         rs = rs_percentiles.get(symbol, 50.0)
@@ -143,37 +151,57 @@ def run_pipeline(
                 "rs_percentile": rs,
             })
 
-    stage_counts["trend_template"] = len(tt_passing)
+    stage_counts["scan_trend_template"] = len(tt_passing)
     if progress_callback:
-        progress_callback("trend_template", len(tt_passing))
+        progress_callback("scan_trend_template", len(tt_passing))
 
-    # Stage 3: VCP/Pattern Detection
+    # ═══════════════════════════════════════════════════════════════════════
+    # N — NARROW: Shortlist top 5-7 only
+    # ═══════════════════════════════════════════════════════════════════════
+
+    # N.1: Leading sector filter (PDF Page 11 + Page 19 Criterion 10)
+    # "Is it in a leading sector? NO → Remove"
+    sector_filtered = [
+        item for item in tt_passing
+        if sector_map.get(item["symbol"], "") in leading_sectors
+    ]
+    stage_counts["narrow_sector"] = len(sector_filtered)
+
+    # N.2: Clean chart patterns — VCP/base detection + Stage 2 confirmation
     pattern_candidates = []
-    for item in tt_passing:
+    for item in sector_filtered:
         symbol = item["symbol"]
         df = stocks_data[symbol]
 
-        # Stage analysis
+        # Stage analysis: must be Stage 2
         stage_result = classify_stage(df, config)
         if stage_result["stage"] not in ("stage_2", "stage_2_early"):
             continue
 
-        # VCP detection
+        # VCP detection: "Clean chart patterns"
         vcp_result = detect_vcp(df, config)
 
-        # Breakout detection
+        # Determine pivot price
         pivot_price = vcp_result.get("pivot_price", 0)
-        if pivot_price > 0:
-            bo_result = detect_breakout(df, pivot_price, config)
-        else:
-            # Use 52-week high as pivot if no VCP
-            pivot_price = df["high"].astype(float).tail(252).max()
-            bo_result = detect_breakout(df, pivot_price, config)
+        if pivot_price <= 0:
+            # Use 52-week high as pivot if no VCP detected
+            pivot_price = float(df["high"].astype(float).tail(252).max())
 
-        # Include if VCP detected OR approaching/breaking out
+        # Breakout detection
+        bo_result = detect_breakout(df, pivot_price, config)
+
+        # Include if VCP detected OR approaching/breaking out of pivot
         if (vcp_result["vcp_detected"] or
-            bo_result["breakout_detected"] or
-            bo_result["approaching_breakout"]):
+                bo_result["breakout_detected"] or
+                bo_result["approaching_breakout"]):
+
+            # N.3: "Not extended" check (FOMO bias fix)
+            # PDF: "If it's >10% extended past pivot, it's not your trade"
+            current_price = float(df["close"].astype(float).iloc[-1])
+            pct_above_pivot = ((current_price - pivot_price) / pivot_price) * 100
+            if pct_above_pivot > 10:
+                continue  # Too extended — not tradeable
+
             pattern_candidates.append({
                 **item,
                 "stage_result": stage_result,
@@ -182,12 +210,12 @@ def run_pipeline(
                 "pivot_price": pivot_price,
             })
 
-    stage_counts["pattern_detection"] = len(pattern_candidates)
+    stage_counts["narrow_patterns"] = len(pattern_candidates)
     if progress_callback:
-        progress_callback("pattern_detection", len(pattern_candidates))
+        progress_callback("narrow_patterns", len(pattern_candidates))
 
-    # Stage 4: CANSLIM Fundamental Screen
-    fundamental_candidates = []
+    # N.3: Fundamental qualification (CANSLIM — supports narrowing)
+    narrowed_candidates = []
     for item in pattern_candidates:
         symbol = item["symbol"]
         df = stocks_data[symbol]
@@ -203,12 +231,14 @@ def run_pipeline(
         ).fetchone()
         conn.close()
 
-        # Score individual criteria
+        # Score individual CANSLIM criteria
         c_result = score_c_criterion(
             dict(fund_row)["eps_growth_qoq"] if fund_row else None,
             config=config
         )
-        a_result = score_a_criterion(None, dict(fund_row).get("roe") if fund_row else None, config=config)
+        a_result = score_a_criterion(
+            None, dict(fund_row).get("roe") if fund_row else None, config=config
+        )
         n_result = score_n_criterion(current_price, high_52w, config=config)
         s_result = score_s_criterion(df, config=config)
         l_result = score_l_criterion(item["rs_percentile"], config=config)
@@ -225,30 +255,25 @@ def run_pipeline(
             "s_criterion": s_result.get("s_criterion"),
             "l_criterion": l_result.get("l_criterion"),
             "i_criterion": i_result.get("i_criterion"),
-            "m_criterion": regime != "red",  # Market direction based on regime
+            "m_criterion": regime != "red",
         }
         canslim = compute_canslim_score(all_criteria)
 
         item["canslim_result"] = {**all_criteria, **canslim}
         item["canslim_score"] = canslim["canslim_score"]
 
-        # Don't filter on fundamentals too strictly — include if score >= 3
-        # (many Indian stocks lack full data)
+        # Minimum qualification: score >= 3 (lenient due to Indian data gaps)
         if canslim["canslim_score"] >= 3:
-            fundamental_candidates.append(item)
+            narrowed_candidates.append(item)
 
-    stage_counts["fundamental_screen"] = len(fundamental_candidates)
+    stage_counts["narrow_qualified"] = len(narrowed_candidates)
     if progress_callback:
-        progress_callback("fundamental_screen", len(fundamental_candidates))
+        progress_callback("narrow_qualified", len(narrowed_candidates))
 
-    # NARROW filter: Remove stocks NOT in leading sectors (PDF Page 11)
-    narrowed_candidates = [
-        item for item in fundamental_candidates
-        if sector_map.get(item["symbol"], "") in leading_sectors
-    ]
-    stage_counts["sector_narrowed"] = len(narrowed_candidates)
+    # ═══════════════════════════════════════════════════════════════════════
+    # I — IDENTIFY EDGES: HV1, HVE, RS Edge, N-Factor, VCP quality
+    # ═══════════════════════════════════════════════════════════════════════
 
-    # Stage 5: Edge Scoring
     scored_candidates = []
     for item in narrowed_candidates:
         bo = item["breakout_result"]
@@ -310,9 +335,13 @@ def run_pipeline(
             "approaching_breakout": bo.get("approaching_breakout", False),
         })
 
-    stage_counts["edge_scoring"] = len(scored_candidates)
+    stage_counts["identify_edges"] = len(scored_candidates)
 
-    # Stage 6: Final Narrowing
+    # ═══════════════════════════════════════════════════════════════════════
+    # P — PLAN THE TRADE: Entry, SL, Target, Position size by edges
+    # ═══════════════════════════════════════════════════════════════════════
+
+    # Rank by composite score and apply sector diversification (max 5-7 final)
     ranked = rank_candidates(scored_candidates)
     watchlist = _apply_sector_diversification(ranked, config)
 
@@ -320,7 +349,7 @@ def run_pipeline(
     if progress_callback:
         progress_callback("final_watchlist", len(watchlist))
 
-    # Add position sizing to watchlist items
+    # Position sizing for each watchlist item
     for item in watchlist:
         entry = item["pivot_price"]
         stop = item["stop_price"]
@@ -335,7 +364,10 @@ def run_pipeline(
             )
             item["position_sizing"] = sizing
 
-    # Store watchlist history
+    # ═══════════════════════════════════════════════════════════════════════
+    # E — EXECUTE: Store history + output for journaling
+    # ═══════════════════════════════════════════════════════════════════════
+
     _store_watchlist_history(watchlist, datetime.now().strftime("%Y-%m-%d"), db_path)
 
     return {
@@ -372,7 +404,7 @@ def _store_watchlist_history(watchlist: list[dict], scan_date: str, db_path: Pat
                 item.get("sector", ""),
                 item.get("current_price", 0),
                 item.get("pivot_price", 0),
-                0,  # distance computed elsewhere
+                0,
                 item.get("stop_price", 0),
                 0,
                 item.get("composite_score", 0),
