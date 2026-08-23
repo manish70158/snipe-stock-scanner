@@ -114,6 +114,73 @@ def scan(output_json, equity):
 
     console.print(table)
 
+    # Show CANSLIM breakdown for each stock
+    if watchlist:
+        console.print("\n[bold cyan]CANSLIM Breakdown:[/bold cyan]")
+        for item in watchlist:
+            canslim = item.get("canslim_detail", {})
+
+            def format_criterion(key, value):
+                """Format criterion with checkmark/cross/dash."""
+                if value is True:
+                    return f"[green]✓[/green]"
+                elif value == "data_unavailable":
+                    return f"[dim]–[/dim]"
+                else:
+                    return f"[red]✗[/red]"
+
+            c = format_criterion("C", canslim.get("C"))
+            a = format_criterion("A", canslim.get("A"))
+            n = format_criterion("N", canslim.get("N"))
+            s = format_criterion("S", canslim.get("S"))
+            l = format_criterion("L", canslim.get("L"))
+            i = format_criterion("I", canslim.get("I"))
+            m = format_criterion("M", canslim.get("M"))
+
+            score = item.get("canslim_score", 0)
+            symbol = item["symbol"]
+
+            console.print(
+                f"  {item.get('rank', '')}. [cyan]{symbol:10}[/cyan] │ "
+                f"C:{c} A:{a} N:{n} S:{s} L:{l} I:{i} M:{m} │ "
+                f"Score: {score}/7"
+            )
+
+        console.print("\n[dim]Legend: C=Earnings A=Annual N=NewHigh S=Supply L=Leader I=Inst M=Market[/dim]")
+
+        # Show Edges breakdown
+        console.print("\n[bold cyan]Edges Breakdown (MD Framework):[/bold cyan]")
+        for item in watchlist:
+            edges = item.get("edges", [])
+            edge_count = item.get("edge_count", 0)
+            symbol = item["symbol"]
+
+            # Format edges with checkmarks
+            hv1 = "[green]✓[/green]" if "hv1" in edges else "[red]✗[/red]"
+            hve = "[green]✓[/green]" if "hve" in edges else "[red]✗[/red]"
+            rs = "[green]✓[/green]" if "rs" in edges else "[red]✗[/red]"
+            nf = "[green]✓[/green]" if "n_factor" in edges else "[red]✗[/red]"
+
+            # Conviction level
+            if edge_count == 4:
+                conviction = "[red]🔥🔥🔥 MAX[/red]"
+            elif edge_count == 3:
+                conviction = "[yellow]🔥🔥[/yellow]"
+            elif edge_count == 2:
+                conviction = "[green]✓ Tradeable[/green]"
+            elif edge_count == 1:
+                conviction = "[yellow]⚠️  Watchlist Only[/yellow]"
+            else:
+                conviction = "[red]✗ Skip[/red]"
+
+            console.print(
+                f"  {item.get('rank', '')}. [cyan]{symbol:10}[/cyan] │ "
+                f"HV1:{hv1} HVE:{hve} RS:{rs} N:{nf} │ "
+                f"{edge_count}/4 {conviction}"
+            )
+
+        console.print("\n[dim]HV1=Highest Vol 50d, HVE=Gap≥5%+Vol≥2x, RS=Top 20%, N=Top 3 Sector[/dim]")
+
 
 @cli.command()
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
