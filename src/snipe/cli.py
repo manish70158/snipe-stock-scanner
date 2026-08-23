@@ -460,3 +460,97 @@ def fetch(symbols):
 
     result = fetch_and_store_prices(fetch_list, progress_callback=progress)
     console.print(f"  Done: {result['success']} success, {result['failed']} failed, {result['total_rows']} rows")
+
+@cli.command()
+@click.option("--symbols", default=10, help="Number of stocks to fetch (default 10, use 500 for full)")
+@click.option("--delay", default=2, help="Delay between requests in seconds (default 2)")
+def fetch_fundamentals(symbols, delay):
+    """Fetch fundamental data (EPS, ROE, holdings) from Screener.in.
+
+    This fetches CANSLIM C, A, I criteria data:
+    - C: Quarterly EPS growth
+    - A: 3-year EPS CAGR and ROE
+    - I: FII/DII institutional holdings
+
+    Note: Screener.in scraping is slow. Use small batches first.
+    """
+    import time
+    from snipe.data.universe import get_universe
+    from snipe.database import get_db
+
+    # Ensure eps_cagr_3yr column exists (migration)
+    console.print("[dim]Checking database schema...[/dim]")
+    conn = get_db()
+    try:
+        conn.execute("ALTER TABLE fundamentals ADD COLUMN eps_cagr_3yr REAL")
+        console.print("[green]✓[/green] Added eps_cagr_3yr column")
+    except Exception:
+        pass  # Column already exists
+    conn.close()
+
+    console.print("[bold blue]Fetching Fundamentals Data[/bold blue]")
+    universe = get_universe()
+
+    if not universe:
+        console.print("[red]No universe data found. Run 'snipe fetch' first.[/red]")
+        return
+
+    # Fetch only first N symbols
+    test_symbols = [s["symbol"] for s in universe[:symbols]]
+    console.print(f"[yellow]Fetching fundamentals for {len(test_symbols)} stocks...[/yellow]")
+    console.print(f"[dim]Delay: {delay}s between requests (Screener.in rate limit)[/dim]\n")
+
+    success_count = 0
+    failed_count = 0
+
+    for i, symbol in enumerate(test_symbols):
+        try:
+            console.print(f"  [{i+1}/{len(test_symbols)}] {symbol:12} ", end="")
+
+            from snipe.data.fundamentals import (
+                fetch_fundamentals_screener,
+                extract_eps_growth,
+                extract_holdings,
+                store_fundamentals
+            )
+
+            raw = fetch_fundamentals_screener(symbol)
+            if raw:
+                eps_data = extract_eps_growth(raw)
+                holdings_data = extract_holdings(raw)
+                store_fundamentals(symbol, eps_data, holdings_data)
+
+                # Show what was fetched
+                eps_qoq = eps_data.get("eps_growth_qoq")
+                eps_cagr = eps_data.get("eps_cagr_3yr")
+                roe = eps_data.get("roe")
+
+                indicators = []
+                if eps_qoq is not None:
+                    indicators.append(f"C:{eps_qoq:+.1f}%")
+                if eps_cagr is not None:
+                    indicators.append(f"A:{eps_cagr:+.1f}%")
+                if roe is not None:
+                    indicators.append(f"ROE:{roe:.1f}%")
+
+                status = " ".join(indicators) if indicators else "partial"
+                console.print(f"[green]✓[/green] {status}")
+                success_count += 1
+            else:
+                console.print("[red]✗[/red] Failed to fetch")
+                failed_count += 1
+
+        except Exception as e:
+            console.print(f"[red]✗[/red] Error: {str(e)[:40]}")
+            failed_count += 1
+
+        # Rate limit delay
+        if i < len(test_symbols) - 1:
+            time.sleep(delay)
+
+    console.print(f"\n[bold green]Done![/bold green] Success: {success_count}, Failed: {failed_count}")
+
+    if failed_count > 0:
+        console.print("[yellow]⚠️  Some stocks failed. This is normal for newly listed stocks or data issues.[/yellow]")
+
+    console.print("\n[dim]Run 'snipe scan' to see updated CANSLIM scores.[/dim]")

@@ -231,12 +231,13 @@ def store_fundamentals(
 
     conn.execute(
         """INSERT OR REPLACE INTO fundamentals
-           (symbol, quarter, eps_growth_qoq, roe, fii_holding_pct,
+           (symbol, quarter, eps_growth_qoq, eps_cagr_3yr, roe, fii_holding_pct,
             dii_holding_pct, promoter_holding_pct, last_updated)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             symbol, quarter,
             eps_data.get("eps_growth_qoq"),
+            eps_data.get("eps_cagr_3yr"),
             eps_data.get("roe"),
             holdings_data.get("fii_holding_pct"),
             holdings_data.get("dii_holding_pct"),
