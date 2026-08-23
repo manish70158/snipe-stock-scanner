@@ -5,6 +5,15 @@ on:
     # Run every Saturday at 12:00 UTC (5:30 PM IST) - after market week ends
     - cron: '0 12 * * 6'
   workflow_dispatch: # Allow manual trigger
+    inputs:
+      force_fundamentals:
+        description: 'Force fundamentals refresh (ignore cache)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 jobs:
   scan:
@@ -23,8 +32,61 @@ jobs:
       - name: Install dependencies
         run: pip install -e .
 
-      - name: Fetch Nifty 500 data
+      - name: Restore previous database (if exists)
+        uses: dawidd6/action-download-artifact@v2
+        continue-on-error: true  # First run won't have artifacts
+        with:
+          workflow: weekly-scan.yml
+          name_is_regexp: true
+          name: snipe-db-.*
+          path: .
+          if_no_artifact_found: ignore
+
+      - name: Use most recent database
+        run: |
+          # Find the most recent database artifact (if any)
+          if [ -d "snipe-db-"* ] 2>/dev/null; then
+            LATEST=$(ls -dt snipe-db-* | head -1)
+            if [ -f "$LATEST/snipe.db" ]; then
+              cp "$LATEST/snipe.db" snipe.db
+              echo "✓ Restored database from $LATEST"
+
+              # Show fundamentals count
+              COUNT=$(sqlite3 snipe.db "SELECT COUNT(*) FROM fundamentals" 2>/dev/null || echo "0")
+              echo "  Fundamentals data: $COUNT records"
+            fi
+          else
+            echo "No previous database found. Starting fresh."
+          fi
+
+      - name: Fetch Nifty 500 price data
         run: snipe fetch --symbols 500
+
+      - name: Fetch fundamentals data (CANSLIM C, A, I)
+        run: |
+          # Check if we need a full refresh
+          FUND_COUNT=$(sqlite3 snipe.db "SELECT COUNT(*) FROM fundamentals" 2>/dev/null || echo "0")
+          FUND_AGE=$(sqlite3 snipe.db "SELECT julianday('now') - julianday(MAX(last_updated)) FROM fundamentals" 2>/dev/null || echo "999")
+          FORCE_REFRESH="${{ github.event.inputs.force_fundamentals }}"
+
+          echo "Current fundamentals: $FUND_COUNT records"
+          echo "Age: $FUND_AGE days"
+          echo "Force refresh: $FORCE_REFRESH"
+
+          # Full refresh if:
+          # 1. Forced by user input
+          # 2. Empty database (< 100 records)
+          # 3. Stale data (> 30 days old)
+          if [ "$FORCE_REFRESH" = "true" ] || [ "$FUND_COUNT" -lt 100 ] || [ $(echo "$FUND_AGE > 30" | bc -l 2>/dev/null || echo "1") -eq 1 ]; then
+            echo "📊 Running FULL fundamentals refresh (all 500 stocks)"
+            echo "This will take ~8-9 minutes..."
+            snipe fetch-fundamentals --symbols 500 --delay 1
+          else
+            echo "✓ Fundamentals data is recent. Skipping fetch."
+            echo "  (Force refresh from Actions UI if needed after earnings season)"
+          fi
+        continue-on-error: true  # Don't fail workflow if some stocks fail
+        timeout-minutes: 15  # Safety timeout
 
       - name: Run SNIPE scan
         id: scan
@@ -62,6 +124,17 @@ jobs:
           except Exception:
               regime = {}
 
+          # Check fundamentals data status
+          import subprocess
+          try:
+              fund_count = subprocess.check_output(
+                  ["sqlite3", "snipe.db", "SELECT COUNT(*) FROM fundamentals"],
+                  text=True
+              ).strip()
+              fund_status = f"({fund_count} stocks)" if int(fund_count) > 0 else "(no data)"
+          except:
+              fund_status = "(unknown)"
+
           # Format message using HTML parse mode (avoids Markdown escaping issues)
           date = scan.get("scan_date", datetime.now().strftime("%Y-%m-%d"))
           counts = scan.get("stage_counts", {})
@@ -70,6 +143,7 @@ jobs:
 
           msg = f"📊 <b>SNIPE Weekly Scan — {date}</b>\n\n"
           msg += f"<b>Market Regime:</b> <code>{regime_status}</code>\n"
+          msg += f"<b>Fundamentals:</b> <code>{fund_status}</code>\n"
           msg += f"<b>Pipeline:</b> {counts.get('universe', 0)} → {counts.get('trend_template', 0)} → {counts.get('pattern_detection', 0)} → {counts.get('fundamental_screen', 0)} → <b>{counts.get('final_watchlist', 0)}</b>\n\n"
 
           if not watchlist:
