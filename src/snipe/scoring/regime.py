@@ -169,6 +169,65 @@ def classify_regime(
     }
 
 
+def compute_sector_rankings(
+    stock_returns: dict[str, float],
+    sector_map: dict[str, str],
+    top_pct: int = 30,
+) -> dict:
+    """Rank sectors by median 6-month return of constituent stocks.
+
+    Args:
+        stock_returns: Dict of symbol -> 6-month return (%).
+        sector_map: Dict of symbol -> sector name.
+        top_pct: Top N% of sectors considered "leading".
+
+    Returns:
+        Dict with:
+        - sector_ranks: {sector_name: percentile_rank}
+        - leading_sectors: list of sector names in top N%
+        - sector_returns: {sector_name: median_return}
+    """
+    # Group returns by sector
+    sector_stocks: dict[str, list[float]] = {}
+    for symbol, ret in stock_returns.items():
+        sector = sector_map.get(symbol, "Unknown")
+        if sector not in sector_stocks:
+            sector_stocks[sector] = []
+        sector_stocks[sector].append(ret)
+
+    # Compute median return per sector
+    sector_returns = {}
+    for sector, returns in sector_stocks.items():
+        if returns:
+            sector_returns[sector] = float(np.median(returns))
+
+    if not sector_returns:
+        return {
+            "sector_ranks": {},
+            "leading_sectors": [],
+            "sector_returns": {},
+        }
+
+    # Rank sectors by median return (higher = better rank)
+    sorted_sectors = sorted(sector_returns.items(), key=lambda x: x[1], reverse=True)
+    total_sectors = len(sorted_sectors)
+
+    sector_ranks = {}
+    for i, (sector, _) in enumerate(sorted_sectors):
+        # Percentile rank: 100 = best sector, 0 = worst
+        sector_ranks[sector] = round((1 - i / max(total_sectors - 1, 1)) * 100, 1)
+
+    # Leading sectors: top N%
+    cutoff_idx = max(1, int(total_sectors * top_pct / 100))
+    leading_sectors = [s for s, _ in sorted_sectors[:cutoff_idx]]
+
+    return {
+        "sector_ranks": sector_ranks,
+        "leading_sectors": leading_sectors,
+        "sector_returns": sector_returns,
+    }
+
+
 def detect_regime_change(
     current_regime: str,
     previous_regime: str | None,

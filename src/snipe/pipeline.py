@@ -20,6 +20,7 @@ from snipe.scoring.canslim import (
     score_s_criterion, score_l_criterion, compute_canslim_score
 )
 from snipe.scoring.edge import identify_edges, compute_composite_score, rank_candidates
+from snipe.scoring.regime import compute_sector_rankings
 from snipe.scoring.position_sizing import compute_position_size
 
 
@@ -80,6 +81,11 @@ def run_pipeline(
             stock_returns[symbol] = ret
 
     rs_percentiles = rank_relative_strength(stock_returns)
+
+    # Compute sector leadership from stock returns
+    sector_top_pct = config.get("edge_scoring", {}).get("sector_leader_top_pct", 30)
+    sector_rankings = compute_sector_rankings(stock_returns, sector_map, top_pct=sector_top_pct)
+    leading_sectors = sector_rankings["leading_sectors"]
 
     # Stage 2: Trend Template Pre-Screen
     tt_passing = []
@@ -191,18 +197,29 @@ def run_pipeline(
     if progress_callback:
         progress_callback("fundamental_screen", len(fundamental_candidates))
 
+    # NARROW filter: Remove stocks NOT in leading sectors (PDF Page 11)
+    narrowed_candidates = [
+        item for item in fundamental_candidates
+        if sector_map.get(item["symbol"], "") in leading_sectors
+    ]
+    stage_counts["sector_narrowed"] = len(narrowed_candidates)
+
     # Stage 5: Edge Scoring
     scored_candidates = []
-    for item in fundamental_candidates:
+    for item in narrowed_candidates:
         bo = item["breakout_result"]
         vcp = item["vcp_result"]
         tt = item["tt_result"]
+
+        # N-Factor: check if stock is at 52-week new high
+        n_criterion = item["canslim_result"].get("n_criterion", False)
 
         edge_result = identify_edges(
             hv1_edge=bo.get("hv1_edge", False),
             hve_edge=bo.get("hve_edge", False),
             rs_percentile=item["rs_percentile"],
             rs_new_high=item["rs_percentile"] >= 90,
+            n_factor_new_high=n_criterion is True,
             vcp_quality_score=vcp.get("quality_score", 0),
             trend_template_score=tt.get("score", 0),
             config=config,
@@ -217,12 +234,17 @@ def run_pipeline(
             config=config,
         )
 
+        stock_sector = sector_map.get(item["symbol"], "Unknown")
+        sector_rank = sector_rankings["sector_ranks"].get(stock_sector, 50)
+
         scored_candidates.append({
             "symbol": item["symbol"],
-            "sector": sector_map.get(item["symbol"], "Unknown"),
+            "sector": stock_sector,
+            "sector_trending": stock_sector in leading_sectors,
+            "sector_rank": sector_rank,
             "current_price": float(stocks_data[item["symbol"]]["close"].iloc[-1]),
             "pivot_price": item["pivot_price"],
-            "stop_price": vcp.get("base_high", 0) * 0.92 if vcp["vcp_detected"] else item["pivot_price"] * 0.92,
+            "stop_price": max(vcp.get("base_low", 0), item["pivot_price"] * 0.92) if vcp["vcp_detected"] else item["pivot_price"] * 0.92,
             "composite_score": composite,
             "edge_count": edge_result["edge_count"],
             "edges": edge_result["edges"],
@@ -278,6 +300,10 @@ def run_pipeline(
         "watchlist": watchlist,
         "regime": regime,
         "account_equity": account_equity,
+        "sector_rankings": {
+            "leading_sectors": leading_sectors,
+            "sector_returns": sector_rankings["sector_returns"],
+        },
     }
 
 

@@ -76,6 +76,8 @@ canslim:
   min_qualified_score: 5
 
 edge_scoring:
+  # Sector leadership: top N% of sectors by momentum = "leading"
+  sector_leader_top_pct: 30
   # RS edge: must be in top N% for RS edge
   rs_edge_percentile: 90
   # Weights for composite score (must sum to 100)

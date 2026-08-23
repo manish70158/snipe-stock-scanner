@@ -204,6 +204,9 @@ def detect_vcp(
 
     approaching = 0 < distance_to_pivot <= vcp_config["approaching_pivot_pct"]
 
+    # Base low: deepest point in the VCP (T1 contraction low)
+    base_low_price = min(c["low_price"] for c in contractions)
+
     return {
         "vcp_detected": True,
         "contractions": len(contractions),
@@ -216,6 +219,7 @@ def detect_vcp(
         "distance_to_pivot_pct": round(distance_to_pivot, 2),
         "volume_declining": volume_declining,
         "base_high": round(base_high_price, 2),
+        "base_low": round(float(base_low_price), 2),
         "pattern_type": "vcp",
     }
 
@@ -283,5 +287,6 @@ def _empty_vcp_result() -> dict:
         "distance_to_pivot_pct": 0,
         "volume_declining": False,
         "base_high": 0,
+        "base_low": 0,
         "pattern_type": "none",
     }

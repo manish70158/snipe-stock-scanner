@@ -8,19 +8,27 @@ def identify_edges(
     hve_edge: bool = False,
     rs_percentile: float = 0,
     rs_new_high: bool = False,
-    sector_leader: bool = False,
+    n_factor_new_high: bool = False,
     vcp_quality_score: float = 0,
     trend_template_score: int = 0,
     config: dict | None = None,
 ) -> dict:
     """Identify which edges are present for a stock.
 
+    The 4 core edges from the SNIPE framework:
+    1. HV1: Breakout on highest volume in 1 year
+    2. HVE: Breakout on highest volume ever
+    3. RS: Stock held better than Nifty during last correction
+    4. N-Factor: Stock at 52-week new high on price
+
+    BONUS: All 4 edges align simultaneously = +1
+
     Args:
         hv1_edge: Breakout on highest volume in 1 year.
         hve_edge: Breakout on highest volume ever.
         rs_percentile: Stock's RS percentile.
         rs_new_high: RS making new high simultaneously with price.
-        sector_leader: Stock in leading sector/theme.
+        n_factor_new_high: Stock price at 52-week new high.
         vcp_quality_score: VCP quality (0-10).
         trend_template_score: Trend Template score (0-10).
         config: Optional config.
@@ -36,25 +44,30 @@ def identify_edges(
 
     edges = []
 
-    # HV1 Edge
+    # HV1 Edge: volume = 52-week high volume
     if hv1_edge:
         edges.append("hv1")
 
-    # HVE Edge (counts separately from HV1)
+    # HVE Edge: volume = all-time highest ever (counts separately from HV1)
     if hve_edge:
         edges.append("hve")
         if "hv1" not in edges:
             edges.append("hv1")  # HVE implies HV1
 
-    # RS Edge: top 10% AND making new RS high
+    # RS Edge: held better than Nifty during last correction
     rs_threshold = es_config["rs_edge_percentile"]
     rs_edge = rs_percentile >= rs_threshold and rs_new_high
     if rs_edge:
         edges.append("rs")
 
-    # N-Factor Edge: sector leadership
-    if sector_leader:
+    # N-Factor Edge: 52-week NEW HIGH on price
+    if n_factor_new_high:
         edges.append("n_factor")
+
+    # BONUS: All 4 core edges align simultaneously (HV1 + HVE + RS + N-Factor)
+    core_edges = {"hv1", "hve", "rs", "n_factor"}
+    if core_edges.issubset(set(edges)):
+        edges.append("alignment_bonus")
 
     # VCP Edge: high quality VCP (score >= 8)
     vcp_edge = vcp_quality_score >= vcp_config["high_quality_threshold"]
@@ -73,6 +86,7 @@ def identify_edges(
         "hve_edge": "hve" in edges,
         "rs_edge": "rs" in edges,
         "n_factor_edge": "n_factor" in edges,
+        "alignment_bonus": "alignment_bonus" in edges,
         "vcp_edge": "vcp" in edges,
         "trend_template_edge": "trend_template" in edges,
     }

@@ -98,8 +98,8 @@ jobs:
               # Scoring metrics table
               msg += "<b>📈 Scoring Metrics:</b>\n"
               msg += "<pre>\n"
-              msg += f"{'#':<2} {'Symbol':<10} {'Score':<5} {'TT':<5} {'VCP':<5} {'Edg':<4} {'Stage':<6}\n"
-              msg += "-" * 46 + "\n"
+              msg += f"{'#':<2} {'Symbol':<10} {'Score':<5} {'TT':<5} {'VCP':<5} {'Edg':<4} {'Sec':<3} {'Stage':<6}\n"
+              msg += "-" * 52 + "\n"
               for item in watchlist:
                   # Shorten stage name for table
                   stage_raw = item.get('stage', '?')
@@ -111,6 +111,8 @@ jobs:
                       "stage_4": "S4",
                   }
                   stage_short = stage_map.get(stage_raw, stage_raw[:6])
+                  # Sector trend indicator
+                  sec_trend = "↑" if item.get("sector_trending") else "→"
                   msg += (
                       f"{item.get('rank', ''):<2} "
                       f"{item['symbol']:<10} "
@@ -118,9 +120,11 @@ jobs:
                       f"{item.get('trend_template_score', 0):<2}/10 "
                       f"{item.get('vcp_quality', 0):<2.0f}/10 "
                       f"{item.get('edge_count', 0):<4} "
+                      f"{sec_trend:<3} "
                       f"{stage_short:<6}\n"
                   )
-              msg += "</pre>\n\n"
+              msg += "</pre>\n"
+              msg += "<i>Sec: ↑=leading sector →=neutral</i>\n\n"
 
               # CANSLIM detail table
               msg += "<b>📋 CANSLIM Breakdown:</b>\n"

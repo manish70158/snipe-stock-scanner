@@ -82,8 +82,12 @@ def compute_position_size(
     position_value = shares * entry_price
     position_pct = (position_value / account_equity) * 100
 
-    # Portfolio concentration limit: max 20% of equity per position
-    max_position_pct = ps_config["max_position_pct_of_equity"]
+    # Edge-count-based position size cap (PDF: Score → Max % of equity)
+    # Score 1: 8-10%, Score 2: 12-13%, Score 3: 15%, Score 4+: 18-20%
+    edge_cap_map = {1: 10, 2: 13, 3: 15}
+    edge_position_cap = edge_cap_map.get(edge_count, ps_config["max_position_pct_of_equity"])
+    max_position_pct = min(edge_position_cap, ps_config["max_position_pct_of_equity"])
+
     if position_pct > max_position_pct:
         max_value = account_equity * (max_position_pct / 100)
         shares = int(max_value / entry_price)
