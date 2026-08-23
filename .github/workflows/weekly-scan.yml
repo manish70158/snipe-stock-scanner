@@ -98,18 +98,28 @@ jobs:
               # Scoring metrics table
               msg += "<b>📈 Scoring Metrics:</b>\n"
               msg += "<pre>\n"
-              msg += f"{'#':<2} {'Symbol':<10} {'Score':<6} {'TT':<5} {'VCP':<5} {'CAN':<4} {'RS%':<5} {'Edg':<4}\n"
-              msg += "-" * 45 + "\n"
+              msg += f"{'#':<2} {'Symbol':<10} {'Score':<5} {'TT':<5} {'VCP':<5} {'CAN':<4} {'Edg':<4} {'Stage':<8}\n"
+              msg += "-" * 48 + "\n"
               for item in watchlist:
+                  # Shorten stage name for table
+                  stage_raw = item.get('stage', '?')
+                  stage_map = {
+                      "stage_2": "S2",
+                      "stage_2_early": "S2-E",
+                      "stage_1": "S1",
+                      "stage_3": "S3",
+                      "stage_4": "S4",
+                  }
+                  stage_short = stage_map.get(stage_raw, stage_raw[:6])
                   msg += (
                       f"{item.get('rank', ''):<2} "
                       f"{item['symbol']:<10} "
-                      f"{item.get('composite_score', 0):<6.0f} "
+                      f"{item.get('composite_score', 0):<5.0f} "
                       f"{item.get('trend_template_score', 0):<2}/10 "
                       f"{item.get('vcp_quality', 0):<2.0f}/10 "
                       f"{item.get('canslim_score', 0):<1}/7 "
-                      f"{item.get('volume_ratio', 0):<5.1f} "
-                      f"{item.get('edge_count', 0):<4}\n"
+                      f"{item.get('edge_count', 0):<4} "
+                      f"{stage_short:<8}\n"
                   )
               msg += "</pre>\n\n"
 
