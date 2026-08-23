@@ -3,14 +3,12 @@
 from datetime import datetime
 from pathlib import Path
 
-import pandas as pd
-
 from snipe.config import load_config
 from snipe.database import init_db, get_db
 from snipe.data.prices import get_stock_prices
 from snipe.data.universe import get_universe
 from snipe.scanning.trend_template import (
-    check_trend_template, rank_relative_strength, compute_sma
+    check_trend_template, rank_relative_strength
 )
 from snipe.scanning.vcp import detect_vcp
 from snipe.scanning.stage_analysis import classify_stage
@@ -64,23 +62,69 @@ def run_pipeline(
     if progress_callback:
         progress_callback("universe", len(symbols))
 
-    # Load all price data and compute RS percentiles
+    # Load all price data and apply universe filters (PDF Page 5)
+    uni_config = config.get("universe", {})
+    min_price = uni_config.get("min_price", 50)
+    min_market_cap_cr = uni_config.get("min_market_cap_cr", 2000)
+    min_avg_vol = uni_config.get("min_avg_daily_volume", 500000)
+    min_avg_turnover_cr = uni_config.get("min_avg_daily_turnover_cr", 10)
+
     stocks_data = {}
     stock_returns = {}
 
     for symbol in symbols:
         df = get_stock_prices(symbol, days=260, db_path=db_path)
-        if len(df) >= 200:
-            stocks_data[symbol] = df
-            # 6-month return for RS ranking (126 trading days)
-            close = df["close"].astype(float)
-            if len(close) >= 126:
-                ret = (close.iloc[-1] / close.iloc[-126] - 1) * 100
-            else:
-                ret = (close.iloc[-1] / close.iloc[0] - 1) * 100
-            stock_returns[symbol] = ret
+        if len(df) < 200:
+            continue
 
-    rs_percentiles = rank_relative_strength(stock_returns)
+        close = df["close"].astype(float)
+        volume = df["volume"].astype(float)
+        current_price = float(close.iloc[-1])
+
+        # Filter: Price > ₹50 (avoid penny stocks)
+        if current_price < min_price:
+            continue
+
+        # Filter: Market Cap > ₹2,000 Cr (if available in DB)
+        # Approximate market cap from price × shares_outstanding (stored in universe DB)
+        mcap_info = next((s for s in universe if s["symbol"] == symbol), None)
+        if mcap_info and mcap_info.get("market_cap"):
+            mcap_cr = mcap_info["market_cap"] / 1e7  # stored in absolute, convert to Cr
+            if mcap_cr < min_market_cap_cr:
+                continue
+
+        # Filter: Liquidity — avg daily volume > 5 lakh OR avg turnover > ₹10 Cr
+        avg_vol_50d = float(volume.tail(50).mean())
+        avg_turnover_cr = (avg_vol_50d * current_price) / 1e7  # ₹ crore
+        if avg_vol_50d < min_avg_vol and avg_turnover_cr < min_avg_turnover_cr:
+            continue
+
+        stocks_data[symbol] = df
+        # 6-month return for RS ranking (126 trading days)
+        if len(close) >= 126:
+            ret_6m = (close.iloc[-1] / close.iloc[-126] - 1) * 100
+        else:
+            ret_6m = (close.iloc[-1] / close.iloc[0] - 1) * 100
+        stock_returns[symbol] = ret_6m
+
+    # Compute dual-timeframe RS (PDF: must outperform BOTH 3-month AND 6-month)
+    stock_returns_3m = {}
+    for symbol, df in stocks_data.items():
+        close = df["close"].astype(float)
+        if len(close) >= 63:
+            stock_returns_3m[symbol] = (close.iloc[-1] / close.iloc[-63] - 1) * 100
+        else:
+            stock_returns_3m[symbol] = stock_returns.get(symbol, 0)
+
+    rs_percentiles_6m = rank_relative_strength(stock_returns)
+    rs_percentiles_3m = rank_relative_strength(stock_returns_3m)
+
+    # Combined RS: use the LOWER of the two percentiles (must be strong in BOTH)
+    rs_percentiles = {}
+    for symbol in stocks_data:
+        rs_6m = rs_percentiles_6m.get(symbol, 50.0)
+        rs_3m = rs_percentiles_3m.get(symbol, 50.0)
+        rs_percentiles[symbol] = min(rs_6m, rs_3m)
 
     # Compute sector leadership from stock returns
     sector_top_pct = config.get("edge_scoring", {}).get("sector_leader_top_pct", 30)

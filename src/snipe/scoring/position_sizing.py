@@ -56,6 +56,15 @@ def compute_position_size(
             "shares": 0,
         }
 
+    # Score 0 = NO TRADE (PDF Page 14: 0 edges = 0% position)
+    if edge_count == 0:
+        return {
+            "valid": False,
+            "reason": "no_edges",
+            "edge_count": 0,
+            "shares": 0,
+        }
+
     # Determine risk percentage based on edge count
     if edge_count >= 4:
         risk_pct = ps_config["risk_4plus_edge_pct"]

@@ -10,18 +10,23 @@ from snipe.scanning.trend_template import compute_sma
 def score_c_criterion(
     eps_growth_qoq: float | None,
     revenue_growth_qoq: float | None = None,
-    prev_eps_growth: float | None = None,
+    eps_growth_history: list[float] | None = None,
     config: dict | None = None,
 ) -> dict:
     """C — Current Quarterly Earnings (QoQ YoY ≥ 20%).
 
+    Also checks for EPS acceleration pattern across 3 quarters.
+    PDF: "3 consecutive quarters of EPS acceleration = institutional magnet"
+    Pattern like 15% → 22% → 38% scores higher.
+
     Args:
-        eps_growth_qoq: QoQ EPS growth percentage.
+        eps_growth_qoq: Current quarter EPS growth percentage (YoY).
         revenue_growth_qoq: Optional revenue growth for supporting signal.
-        prev_eps_growth: Previous quarter's growth for acceleration check.
+        eps_growth_history: Last 3 quarters of EPS growth [oldest..newest].
+            E.g. [15, 22, 38] means Q-2=15%, Q-1=22%, Q0=38%.
 
     Returns:
-        Dict with c_criterion, eps_growth_qoq, eps_decelerating.
+        Dict with c_criterion, eps_growth_qoq, eps_accelerating, etc.
     """
     if config is None:
         config = load_config()
@@ -32,16 +37,31 @@ def score_c_criterion(
         return {"c_criterion": "data_unavailable", "eps_growth_qoq": None}
 
     passes = eps_growth_qoq >= threshold
-    decelerating = (
-        prev_eps_growth is not None
-        and eps_growth_qoq < prev_eps_growth
-    )
+
+    # EPS Acceleration: 3 consecutive quarters all growing AND each > previous
+    eps_accelerating = False
+    eps_consecutive_growth = False
+    if eps_growth_history and len(eps_growth_history) >= 3:
+        last_3 = eps_growth_history[-3:]
+        # All 3 quarters must show positive growth
+        eps_consecutive_growth = all(g > 0 for g in last_3)
+        # Each quarter must be higher than the previous (acceleration)
+        eps_accelerating = (
+            eps_consecutive_growth
+            and last_3[1] > last_3[0]
+            and last_3[2] > last_3[1]
+        )
+
+    # A+ signal: ≥30% growth
+    a_plus = eps_growth_qoq >= 30
 
     return {
         "c_criterion": passes,
         "eps_growth_qoq": round(eps_growth_qoq, 1),
         "revenue_growth_qoq": round(revenue_growth_qoq, 1) if revenue_growth_qoq else None,
-        "eps_decelerating": decelerating,
+        "eps_accelerating": eps_accelerating,
+        "eps_consecutive_growth": eps_consecutive_growth,
+        "eps_a_plus_signal": a_plus,
     }
 
 

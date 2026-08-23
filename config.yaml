@@ -5,6 +5,13 @@ universe:
   index: "NIFTY500"
   # Refresh constituent list quarterly
   refresh_interval_days: 90
+  # Price floor: avoid penny stocks (operator manipulation, wide spreads)
+  min_price: 50
+  # Market cap floor: mid-cap and above (₹ crore). Institutional participation = better patterns
+  min_market_cap_cr: 2000
+  # Liquidity: avg daily volume minimum (shares) OR avg daily turnover (₹ crore)
+  min_avg_daily_volume: 500000
+  min_avg_daily_turnover_cr: 10
 
 trend_template:
   # Criterion 8: Price must be at least this % above 52-week low
