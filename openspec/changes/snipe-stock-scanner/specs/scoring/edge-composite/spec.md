@@ -11,15 +11,21 @@ The system SHALL evaluate each stock for the following edge factors, assigning 1
 1. **HV1 Edge**: Breakout on highest volume in 1 year (252 days)
 2. **HVE Edge**: Breakout on highest volume ever in available history
 3. **RS Edge**: Stock 6-month RS in top 10% of Nifty 500 AND making a new RS high simultaneously with price high
-4. **N-Factor Edge**: Stock in a leading sector/theme (PLI beneficiary, new high in sector RS)
+4. **N-Factor Edge**: Stock price at or within 5% of its 52-week high (new price high confirms momentum alignment)
 5. **VCP Edge**: High-quality VCP pattern (quality score ≥8/10) with tight final contraction ≤8%
 6. **Trend Template Edge**: Perfect 10/10 Trend Template score
 
-Maximum edge count: 6 (though 4+ is exceptional and rare).
+**Alignment Bonus**: When all 4 core edges (HV1 + HVE + RS + N-Factor) align simultaneously, the system SHALL add +1 bonus point.
+
+Maximum edge count: 7 (4 core + bonus + VCP + Trend Template; 5+ is exceptional and rare).
 
 #### Scenario: Multi-edge breakout
-- **WHEN** a stock breaks out with HV1 (highest volume in 1 year), RS in top 5%, and a high-quality VCP pattern, with perfect Trend Template
-- **THEN** the system SHALL report edge_count=4, edges=["hv1","rs","vcp","trend_template"], composite_score calculated accordingly
+- **WHEN** a stock breaks out with HV1 (highest volume in 1 year), RS in top 5%, price at 52-week high, and a high-quality VCP pattern, with perfect Trend Template
+- **THEN** the system SHALL report edge_count=5, edges=["hv1","rs","n_factor","vcp","trend_template"], composite_score calculated accordingly
+
+#### Scenario: Alignment bonus triggered
+- **WHEN** a stock breaks out with HV1, HVE (all-time highest volume), RS in top 5%, AND price at 52-week high
+- **THEN** the system SHALL report all 4 core edges plus alignment_bonus, giving edge_count=5 from volume/momentum alone
 
 #### Scenario: Single-edge breakout
 - **WHEN** a stock breaks out with adequate volume (not HV1), average RS rank (top 25%), and a medium-quality VCP

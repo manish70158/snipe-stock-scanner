@@ -73,6 +73,24 @@ The system SHALL classify the market into one of three regimes based on the comb
 - **WHEN** Nifty 500 is below declining 150-day MA and only 30% of stocks above 50-DMA
 - **THEN** the system SHALL classify regime="red" and suppress all new buy signals
 
+### Requirement: Sector Rankings and Leadership
+
+The system SHALL compute sector momentum rankings using the 6-month returns of all stocks grouped by sector:
+- Group all stocks (from the universe) by their sector classification
+- Compute the **median** 6-month return per sector (median is robust to outliers)
+- Rank sectors by median return (percentile: 100 = best, 0 = worst)
+- Sectors in the **top 30%** (configurable via `sector_leader_top_pct`) are classified as "leading"
+
+The leading sector list is used by the NARROW stage of the pipeline to filter out stocks not in trending sectors.
+
+#### Scenario: Leading sectors identified
+- **WHEN** there are 20 sectors and their 6-month median returns are computed
+- **THEN** the system SHALL identify the top 6 sectors (30% of 20) as "leading" and output their names and returns
+
+#### Scenario: Sector rankings output
+- **WHEN** sector rankings are computed
+- **THEN** the system SHALL output: leading_sectors (list), sector_ranks (name→percentile), sector_returns (name→median_return)
+
 ### Requirement: Regime Change Alerts
 
 The system SHALL detect and report regime transitions (green→yellow, yellow→red, red→yellow, yellow→green) and timestamp them.

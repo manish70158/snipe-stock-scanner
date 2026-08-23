@@ -53,10 +53,28 @@ The system SHALL adjust position sizing based on the current market regime:
 - **WHEN** a 4-edge stock is identified but market regime is "red"
 - **THEN** the system SHALL output position_size=0 with reason="market_regime_red"
 
+### Requirement: Edge-Count Position Size Caps
+
+The system SHALL enforce maximum position size as a percentage of equity based on edge count:
+- 1 edge: Maximum 10% of equity in the position
+- 2 edges: Maximum 13% of equity in the position
+- 3 edges: Maximum 15% of equity in the position
+- 4+ edges: Maximum 20% of equity in the position
+
+These caps prevent over-concentration in low-conviction setups even when stops are tight.
+
+#### Scenario: Position capped by edge count
+- **WHEN** a stock has 1 edge, tight stop (3%), account equity 10,00,000, risk-based calculation yields 16% of equity
+- **THEN** the system SHALL cap the position at 10% of equity (1,00,000) regardless of the risk calculation
+
+#### Scenario: High-conviction full allocation
+- **WHEN** a stock has 4 edges, tight stop, and risk-based calculation yields 18% of equity
+- **THEN** the system SHALL allow the full 18% (within the 20% cap for 4+ edges)
+
 ### Requirement: Portfolio Concentration Limits
 
 The system SHALL enforce:
-- Maximum 20% of equity in a single position
+- Maximum 20% of equity in a single position (absolute cap)
 - Maximum 5% of equity at risk across all open positions combined
 - Maximum 8-10 open positions at any time
 

@@ -27,13 +27,27 @@ The system SHALL report the number of contractions, their depths, and the overal
 - **WHEN** a stock corrects only 5% from its high before forming a tight range
 - **THEN** the system SHALL classify this as a "flat base" rather than a VCP (minimum T1 correction of 10% required for VCP classification)
 
-### Requirement: Pivot Point Detection
+### Requirement: Pivot Point and Base Low Detection
 
 The system SHALL identify the VCP pivot point (buy point) as the price level at the top of the last contraction before breakout. The pivot price SHALL be the highest high within the final contraction zone.
+
+The system SHALL also identify the base_low as the deepest price point across all contractions in the VCP pattern. This base_low is used as the natural stop-loss level (stop below base low per framework rules).
 
 #### Scenario: Pivot identified at final contraction high
 - **WHEN** a VCP has formed with the last contraction's highest price at 450
 - **THEN** the system SHALL report pivot_price=450 as the breakout trigger level
+
+#### Scenario: Base low for stop-loss
+- **WHEN** a VCP has contractions with lows at 380, 395, 420 (three contractions)
+- **THEN** the system SHALL report base_low=380 (the deepest point, T1 low) for use as the natural stop-loss level
+
+#### Scenario: Stop-loss calculation using base_low
+- **WHEN** a VCP has pivot_price=450 and base_low=420 (6.7% below pivot)
+- **THEN** the position sizing system SHALL use base_low=420 as stop_price (within 8% max stop distance)
+
+#### Scenario: Base low too far from pivot
+- **WHEN** a VCP has pivot_price=450 and base_low=380 (15.6% below pivot)
+- **THEN** the system SHALL use the tighter stop of max(base_low, pivot×0.92) = 414 (8% below pivot)
 
 #### Scenario: Price approaching pivot
 - **WHEN** a stock with identified VCP pivot at 450 is currently trading at 445 (within 2% of pivot)

@@ -11,13 +11,18 @@ The system SHALL process stocks through the following sequential stages:
 1. **Universe Filter**: Start with Nifty 500 constituents (or user-defined universe)
 2. **Technical Pre-Screen**: Apply Trend Template (must pass all 10 points) → typically reduces to 50-80 stocks
 3. **Pattern Detection**: Identify VCP/base patterns and proximity to pivot → typically reduces to 15-25 stocks
-4. **Fundamental Screen**: Apply CANSLIM criteria (score ≥ 5) → typically reduces to 8-15 stocks
-5. **Edge Scoring**: Compute composite edge score and rank
-6. **Final Narrowing**: Select top 5-7 by composite score, ensuring sector diversification (max 2 per sector)
+4. **Fundamental Screen**: Apply CANSLIM criteria (score ≥ 3) → typically reduces to 15-20 stocks
+5. **Sector NARROW Filter**: Remove stocks NOT in leading sectors (top 30% by median 6-month return). Leading sectors are computed from the aggregate performance of all 500 stocks.
+6. **Edge Scoring**: Compute composite edge score and rank
+7. **Final Narrowing**: Select top 5-7 by composite score, ensuring sector diversification (max 2 per sector)
 
 #### Scenario: Full pipeline execution
 - **WHEN** the scanner runs on 500 stocks
-- **THEN** the system SHALL output the count at each stage (e.g., 500 → 65 → 18 → 11 → ranked → top 7) and the final watchlist of 5-7 stocks
+- **THEN** the system SHALL output the count at each stage (e.g., 500 → 65 → 18 → 15 → 10 sector-narrowed → ranked → top 7) and the final watchlist of 5-7 stocks
+
+#### Scenario: Sector NARROW filter applied
+- **WHEN** 20 stocks pass the fundamental screen but only 6 of them are in leading sectors (top 30% by 6-month median return)
+- **THEN** the system SHALL narrow the candidate list to those 6 stocks before edge scoring
 
 #### Scenario: No stocks pass all filters
 - **WHEN** no stocks pass the Trend Template + VCP + CANSLIM combined criteria
@@ -40,18 +45,23 @@ The system SHALL enforce maximum 2 stocks from the same sector in the final 5-7 
 The system SHALL output the final watchlist with for each stock:
 - Rank (1-7)
 - Symbol and company name
-- Sector
+- Sector and sector_trending flag (whether sector is in leading group)
+- Sector rank (percentile: 100 = best performing sector)
 - Current price
 - Pivot price (entry trigger)
 - Distance to pivot (%)
 - Stop loss level and distance (%)
 - Composite edge score
-- Edge count and which edges
+- Edge count and which edges (including n_factor when at 52-week high)
 - Trend Template score
 - VCP quality
 - CANSLIM score
 - Suggested position size (shares and value)
 - Risk:Reward ratio to first target
+
+The system SHALL also output sector_rankings metadata:
+- leading_sectors: list of sector names in top 30% by 6-month median return
+- sector_returns: median 6-month return per sector
 
 #### Scenario: Watchlist display
 - **WHEN** the pipeline completes with 6 qualifying stocks
