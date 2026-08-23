@@ -71,10 +71,10 @@ def run_pipeline(
         df = get_stock_prices(symbol, days=260, db_path=db_path)
         if len(df) >= 200:
             stocks_data[symbol] = df
-            # 12-month return for RS ranking
+            # 6-month return for RS ranking (126 trading days)
             close = df["close"].astype(float)
-            if len(close) >= 252:
-                ret = (close.iloc[-1] / close.iloc[-252] - 1) * 100
+            if len(close) >= 126:
+                ret = (close.iloc[-1] / close.iloc[-126] - 1) * 100
             else:
                 ret = (close.iloc[-1] / close.iloc[0] - 1) * 100
             stock_returns[symbol] = ret

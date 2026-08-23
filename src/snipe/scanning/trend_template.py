@@ -22,21 +22,23 @@ def compute_sma(prices: pd.Series, period: int) -> pd.Series:
 def compute_relative_strength(
     stock_prices: pd.Series,
     index_prices: pd.Series,
+    lookback: int = 126,
 ) -> float:
-    """Compute 12-month relative strength of stock vs index.
+    """Compute 6-month relative strength of stock vs index.
 
     Args:
-        stock_prices: Series of stock closing prices (at least 252 days).
+        stock_prices: Series of stock closing prices (at least 126 days).
         index_prices: Series of index closing prices (same period).
+        lookback: Number of trading days (default 126 = 6 months).
 
     Returns:
-        RS value (stock_12m_return / index_12m_return * 100).
+        RS value (stock_6m_return / index_6m_return * 100).
     """
-    if len(stock_prices) < 252 or len(index_prices) < 252:
+    if len(stock_prices) < lookback or len(index_prices) < lookback:
         return 0.0
 
-    stock_return = (stock_prices.iloc[-1] / stock_prices.iloc[0] - 1) * 100
-    index_return = (index_prices.iloc[-1] / index_prices.iloc[0] - 1) * 100
+    stock_return = (stock_prices.iloc[-1] / stock_prices.iloc[-lookback] - 1) * 100
+    index_return = (index_prices.iloc[-1] / index_prices.iloc[-lookback] - 1) * 100
 
     if index_return == 0:
         return stock_return
