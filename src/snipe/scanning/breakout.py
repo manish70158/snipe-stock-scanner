@@ -15,7 +15,7 @@ def detect_breakout(
     """Detect if a stock has broken out above its pivot point.
 
     Args:
-        df: DataFrame with columns: date, close, volume (sorted by date asc).
+        df: DataFrame with columns: date, close, high, low, volume (sorted by date asc).
         pivot_price: The breakout trigger price level.
         config: Optional config dict.
 
@@ -31,6 +31,8 @@ def detect_breakout(
         return _empty_breakout_result()
 
     close = df["close"].astype(float)
+    high = df["high"].astype(float)
+    low = df["low"].astype(float)
     volume = df["volume"].astype(float)
 
     current_price = close.iloc[-1]
@@ -63,21 +65,28 @@ def detect_breakout(
     else:
         strength = "none"
 
-    # HV1 Edge: highest volume in 252 days
-    hv1_lookback = bo_config["hv1_lookback_days"]
+    # HV1 Edge: highest volume in 50 days AND close in upper 60% of range
+    # MD says 50 days, not 252, and requires close in upper 60% of day's range
+    hv1_lookback = 50
     hv1_edge = False
     hve_edge = False
 
     if breakout_detected and len(volume) >= hv1_lookback:
-        max_vol_1yr = volume.tail(hv1_lookback).max()
-        hv1_edge = current_volume >= max_vol_1yr
+        max_vol_50d = volume.tail(hv1_lookback).max()
+        day_range = float(high.iloc[-1]) - float(low.iloc[-1])
+        close_in_upper_60 = (
+            current_price > (float(low.iloc[-1]) + 0.6 * day_range)
+            if day_range > 0
+            else False
+        )
+        hv1_edge = current_volume >= max_vol_50d and close_in_upper_60
 
-    # HVE Edge: highest volume in entire available history
-    if breakout_detected:
-        max_vol_ever = volume.max()
-        hve_edge = current_volume >= max_vol_ever
-        if hve_edge:
-            hv1_edge = True  # HVE implies HV1
+    # HVE Edge: Gap up ≥5% with volume ≥2x 50DMA (post-earnings momentum proxy)
+    # MD defines HVE as: "Stock gaps up or surges 5%+ on earnings day with volume ≥ 2x 50DMA"
+    # Since we can't detect earnings day automatically, use gap up ≥5% as proxy
+    if len(close) >= 2:
+        gap_pct = ((current_price - float(close.iloc[-2])) / float(close.iloc[-2])) * 100
+        hve_edge = gap_pct >= 5 and volume_ratio >= 2.0
 
     # Approaching breakout detection
     approaching_pct = bo_config["approaching_pct"] / 100

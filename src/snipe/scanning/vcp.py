@@ -62,6 +62,7 @@ def detect_vcp(
         - quality_score: float (0-10)
         - approaching_pivot: bool
         - distance_to_pivot_pct: float
+        - last_contraction_low: float (C3 low for stop placement)
     """
     if config is None:
         config = load_config()
@@ -207,6 +208,9 @@ def detect_vcp(
     # Base low: deepest point in the VCP (T1 contraction low)
     base_low_price = min(c["low_price"] for c in contractions)
 
+    # Last contraction low: C3 low (final contraction low) for stop placement per MD
+    last_contraction_low = float(contractions[-1]["low_price"])
+
     return {
         "vcp_detected": True,
         "contractions": len(contractions),
@@ -220,6 +224,7 @@ def detect_vcp(
         "volume_declining": volume_declining,
         "base_high": round(base_high_price, 2),
         "base_low": round(float(base_low_price), 2),
+        "last_contraction_low": round(last_contraction_low, 2),
         "pattern_type": "vcp",
     }
 
@@ -288,5 +293,6 @@ def _empty_vcp_result() -> dict:
         "volume_declining": False,
         "base_high": 0,
         "base_low": 0,
+        "last_contraction_low": 0,
         "pattern_type": "none",
     }

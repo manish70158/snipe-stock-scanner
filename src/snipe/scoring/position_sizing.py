@@ -15,8 +15,14 @@ def compute_position_size(
 ) -> dict:
     """Compute position size based on edge count and risk parameters.
 
+    MD Edge Scoring:
+    - 0-1 edges: NO TRADE (watchlist only)
+    - 2 edges: 0.5% risk, 5% max position
+    - 3 edges: 1.0% risk, 8% max position
+    - 4 edges: 1.5% risk, 12% max position
+
     Args:
-        edge_count: Number of edges (1-6).
+        edge_count: Number of edges (0-4).
         entry_price: Planned entry price.
         stop_price: Stop-loss price.
         account_equity: Total account equity.
@@ -56,24 +62,22 @@ def compute_position_size(
             "shares": 0,
         }
 
-    # Score 0 = NO TRADE (PDF Page 14: 0 edges = 0% position)
-    if edge_count == 0:
+    # MD: 0-1 edges = NO TRADE (watchlist only)
+    if edge_count < 2:
         return {
             "valid": False,
-            "reason": "no_edges",
-            "edge_count": 0,
+            "reason": "insufficient_edges",
+            "edge_count": edge_count,
             "shares": 0,
         }
 
-    # Determine risk percentage based on edge count
+    # Determine risk percentage based on edge count (MD position size table)
     if edge_count >= 4:
-        risk_pct = ps_config["risk_4plus_edge_pct"]
+        risk_pct = 1.5
     elif edge_count == 3:
-        risk_pct = ps_config["risk_3_edge_pct"]
-    elif edge_count == 2:
-        risk_pct = ps_config["risk_2_edge_pct"]
-    else:
-        risk_pct = ps_config["risk_1_edge_pct"]
+        risk_pct = 1.0
+    else:  # edge_count == 2
+        risk_pct = 0.5
 
     # Apply regime adjustment
     sizing_multiplier = mr_config[f"{regime}_sizing_multiplier"]
@@ -91,11 +95,9 @@ def compute_position_size(
     position_value = shares * entry_price
     position_pct = (position_value / account_equity) * 100
 
-    # Edge-count-based position size cap (PDF: Score → Max % of equity)
-    # Score 1: 8-10%, Score 2: 12-13%, Score 3: 15%, Score 4+: 18-20%
-    edge_cap_map = {1: 10, 2: 13, 3: 15}
-    edge_position_cap = edge_cap_map.get(edge_count, ps_config["max_position_pct_of_equity"])
-    max_position_pct = min(edge_position_cap, ps_config["max_position_pct_of_equity"])
+    # Edge-count-based position size cap (MD: 2 edges=5%, 3 edges=8%, 4 edges=12%)
+    edge_cap_map = {2: 5, 3: 8, 4: 12}
+    max_position_pct = edge_cap_map.get(edge_count, 12)
 
     if position_pct > max_position_pct:
         max_value = account_equity * (max_position_pct / 100)
@@ -108,16 +110,16 @@ def compute_position_size(
     new_total_risk = current_total_risk + adjusted_risk_pct
     portfolio_risk_warning = new_total_risk > max_total_risk
 
-    # Max positions check
+    # Max positions check (MD: max 5 positions)
     max_positions = ps_config["max_open_positions"]
     positions_warning = current_positions >= max_positions
 
-    # Targets (R-multiples)
-    target_1 = entry_price + risk_per_share  # 1R
-    target_2 = entry_price + 2 * risk_per_share  # 2R
-    target_3 = entry_price + 3 * risk_per_share  # 3R
+    # Targets (R-multiples) - MD: Target 1 must be ≥ 2× stop distance (R:R ≥ 2:1)
+    target_1 = entry_price + 2 * risk_per_share  # 2R
+    target_2 = entry_price + 3 * risk_per_share  # 3R
+    target_3 = entry_price + 4 * risk_per_share  # 4R
 
-    # Risk:Reward to first meaningful target (2R)
+    # Risk:Reward to first meaningful target
     rr_ratio = 2.0
 
     return {

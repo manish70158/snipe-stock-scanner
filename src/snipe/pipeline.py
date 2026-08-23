@@ -36,11 +36,11 @@ def run_pipeline(
     config: dict | None = None,
     progress_callback=None,
 ) -> dict:
-    """Run the full S.N.I.P.E. scan pipeline per framework PDF.
+    """Run the full S.N.I.P.E. scan pipeline per MD framework.
 
     S — SCAN:     Universe → Filters(Price, Vol, MCap) → RS ranking → Trend Template
-    N — NARROW:   Leading sectors → Clean chart (VCP/base) → Not extended → Max 5-7
-    I — IDENTIFY: Edge scoring (HV1, HVE, RS, N-Factor, Bonus) + VCP quality
+    N — NARROW:   Leading sectors (top 3) → Clean chart (VCP/base) → Not extended → Max 5-7
+    I — IDENTIFY: Edge scoring (HV1, HVE, RS, N-Factor) + VCP quality
     P — PLAN:     Entry/Stop/Target/Position sizing by edge count
     E — EXECUTE:  Output formatted for limit orders + journaling
 
@@ -71,11 +71,10 @@ def run_pipeline(
     if progress_callback:
         progress_callback("universe", len(symbols))
 
-    # S.2: Apply universe filters (PDF Page 5: Vol, EPS, RS)
+    # S.2: Apply universe filters (MD: Vol, EPS, RS)
     uni_config = config.get("universe", {})
     min_price = uni_config.get("min_price", 50)
     min_market_cap_cr = uni_config.get("min_market_cap_cr", 2000)
-    min_avg_vol = uni_config.get("min_avg_daily_volume", 500000)
     min_avg_turnover_cr = uni_config.get("min_avg_daily_turnover_cr", 10)
 
     stocks_data = {}
@@ -101,10 +100,10 @@ def run_pipeline(
             if mcap_cr < min_market_cap_cr:
                 continue
 
-        # Filter: Liquidity — avg daily volume > 5L shares OR avg turnover > ₹10 Cr
+        # Filter: Liquidity — MD: avg daily turnover > ₹10 Cr
         avg_vol_50d = float(volume.tail(50).mean())
         avg_turnover_cr = (avg_vol_50d * current_price) / 1e7
-        if avg_vol_50d < min_avg_vol and avg_turnover_cr < min_avg_turnover_cr:
+        if avg_turnover_cr < min_avg_turnover_cr:
             continue
 
         stocks_data[symbol] = df
@@ -115,7 +114,7 @@ def run_pipeline(
             ret_6m = (close.iloc[-1] / close.iloc[0] - 1) * 100
         stock_returns[symbol] = ret_6m
 
-    # S.3: Compute dual-timeframe RS (PDF: must outperform BOTH 3-month AND 6-month)
+    # S.3: Compute dual-timeframe RS (must outperform BOTH 3-month AND 6-month)
     stock_returns_3m = {}
     for symbol, df in stocks_data.items():
         close = df["close"].astype(float)
@@ -134,10 +133,15 @@ def run_pipeline(
         rs_3m = rs_percentiles_3m.get(symbol, 50.0)
         rs_percentiles[symbol] = min(rs_6m, rs_3m)
 
-    # S.4: Compute sector leadership (PDF Page 19: sector RS in top 25%)
-    sector_top_pct = config.get("edge_scoring", {}).get("sector_leader_top_pct", 25)
-    sector_rankings = compute_sector_rankings(stock_returns, sector_map, top_pct=sector_top_pct)
-    leading_sectors = sector_rankings["leading_sectors"]
+    # S.4: Compute sector leadership (MD: "top 3 sectors this month")
+    sector_rankings = compute_sector_rankings(stock_returns, sector_map, top_pct=100)
+    # Get top 3 sectors by returns
+    sorted_sectors = sorted(
+        sector_rankings["sector_returns"].items(),
+        key=lambda x: x[1],
+        reverse=True
+    )
+    leading_sectors = [s for s, _ in sorted_sectors[:3]]
 
     # S.5: Trend Template (10-criteria SEPA check — ALL must pass)
     tt_passing = []
@@ -159,7 +163,7 @@ def run_pipeline(
     # N — NARROW: Shortlist top 5-7 only
     # ═══════════════════════════════════════════════════════════════════════
 
-    # N.1: Leading sector filter (PDF Page 11 + Page 19 Criterion 10)
+    # N.1: Leading sector filter (MD: "top 3 sectors this month")
     # "Is it in a leading sector? NO → Remove"
     sector_filtered = [
         item for item in tt_passing
@@ -169,7 +173,7 @@ def run_pipeline(
 
     # N.2: Clean chart patterns — VCP/base detection + Stage 2 confirmation
     pipeline_config = config.get("pipeline", {})
-    max_above_pivot = pipeline_config.get("max_above_pivot_pct", 5)
+    max_above_pivot = pipeline_config.get("max_above_pivot_pct", 10)
     max_weekly_range = pipeline_config.get("max_avg_weekly_range_pct", 6.0)
 
     pattern_candidates = []
@@ -195,7 +199,7 @@ def run_pipeline(
         bo_result = detect_breakout(df, pivot_price, config)
 
         # N.2b: "Clean, tradeable chart" — reject choppy/V-shaped action
-        # PDF: "Avoid: V-shaped recoveries, choppy, wide-swinging action"
+        # MD: "Avoid: V-shaped recoveries, choppy, wide-swinging action"
         if _is_choppy_chart(df, max_avg_weekly_range_pct=max_weekly_range):
             continue
 
@@ -204,7 +208,7 @@ def run_pipeline(
                 bo_result["breakout_detected"] or
                 bo_result["approaching_breakout"]):
 
-            # N.4: "Not extended" check (PDF NARROW: "within 5% of pivot")
+            # N.4: "Not extended" check (MD: "within 10% of pivot")
             # "If already 20-30% above the last proper base = too risky"
             current_price = float(df["close"].astype(float).iloc[-1])
             pct_above_pivot = ((current_price - pivot_price) / pivot_price) * 100
@@ -289,17 +293,20 @@ def run_pipeline(
         vcp = item["vcp_result"]
         tt = item["tt_result"]
 
-        # N-Factor: check if stock is at 52-week new high
-        n_criterion = bool(item["canslim_result"].get("n_criterion", False))
+        # RS Edge: Stock held better than Nifty during correction
+        # MD: "Stock fell less than 50% of Nifty's decline during recent correction"
+        # Fallback proxy: RS percentile >= 80
+        rs_correction_edge = item["rs_percentile"] >= 80
+
+        # N-Factor: Sector/policy catalyst (qualitative, defaults to False)
+        # Can't be automated from price data alone
+        n_factor_catalyst = False
 
         edge_result = identify_edges(
             hv1_edge=bo.get("hv1_edge", False),
             hve_edge=bo.get("hve_edge", False),
-            rs_percentile=item["rs_percentile"],
-            rs_new_high=item["rs_percentile"] >= 90,
-            n_factor_new_high=n_criterion,
-            vcp_quality_score=vcp.get("quality_score", 0),
-            trend_template_score=tt.get("score", 0),
+            rs_correction_edge=rs_correction_edge,
+            n_factor_catalyst=False,  # qualitative — requires manual assessment
             config=config,
         )
 
@@ -315,6 +322,12 @@ def run_pipeline(
         stock_sector = sector_map.get(item["symbol"], "Unknown")
         sector_rank = sector_rankings["sector_ranks"].get(stock_sector, 50)
 
+        # Stop placement: MD says use last contraction low (C3 low), not base_low
+        if vcp["vcp_detected"] and vcp.get("last_contraction_low", 0) > 0:
+            stop_price = vcp["last_contraction_low"]
+        else:
+            stop_price = item["pivot_price"] * 0.92
+
         scored_candidates.append({
             "symbol": item["symbol"],
             "sector": stock_sector,
@@ -322,7 +335,7 @@ def run_pipeline(
             "sector_rank": sector_rank,
             "current_price": float(stocks_data[item["symbol"]]["close"].iloc[-1]),
             "pivot_price": item["pivot_price"],
-            "stop_price": max(vcp.get("base_low", 0), item["pivot_price"] * 0.92) if vcp["vcp_detected"] else item["pivot_price"] * 0.92,
+            "stop_price": stop_price,
             "composite_score": composite,
             "edge_count": edge_result["edge_count"],
             "edges": edge_result["edges"],
@@ -393,7 +406,7 @@ def run_pipeline(
 
 
 def _is_choppy_chart(df, lookback_weeks: int = 8, max_avg_weekly_range_pct: float = 6.0) -> bool:
-    """Detect choppy, wide-swinging price action (PDF: "Avoid V-shaped, choppy").
+    """Detect choppy, wide-swinging price action (MD: "Avoid V-shaped, choppy").
 
     A chart is "choppy" if the average weekly price range over the last N weeks
     exceeds a threshold. Clean bases have tight weekly ranges (1-3%).

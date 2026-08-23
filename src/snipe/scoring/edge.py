@@ -6,89 +6,55 @@ from snipe.config import load_config
 def identify_edges(
     hv1_edge: bool = False,
     hve_edge: bool = False,
-    rs_percentile: float = 0,
-    rs_new_high: bool = False,
-    n_factor_new_high: bool = False,
-    vcp_quality_score: float = 0,
-    trend_template_score: int = 0,
+    rs_correction_edge: bool = False,
+    n_factor_catalyst: bool = False,
     config: dict | None = None,
 ) -> dict:
-    """Identify which edges are present for a stock.
+    """Identify which of the 4 edges are present (MD framework).
 
-    The 4 core edges from the SNIPE framework:
-    1. HV1: Breakout on highest volume in 1 year
-    2. HVE: Breakout on highest volume ever
-    3. RS: Stock held better than Nifty during last correction
-    4. N-Factor: Stock at 52-week new high on price
+    The 4 Edges:
+    1. HV1: Highest Volume Day 1 — Institutional entry signal
+    2. HVE: High Volume Earnings — Post-result momentum
+    3. RS Edge: Relative Strength — Outperforming in correction
+    4. N-Factor: News Catalyst — Sector/policy tailwind
 
-    BONUS: All 4 edges align simultaneously = +1
+    Rule: Trade only setups with 2+ edges. 1 edge = watchlist only.
 
     Args:
-        hv1_edge: Breakout on highest volume in 1 year.
-        hve_edge: Breakout on highest volume ever.
-        rs_percentile: Stock's RS percentile.
-        rs_new_high: RS making new high simultaneously with price.
-        n_factor_new_high: Stock price at 52-week new high.
-        vcp_quality_score: VCP quality (0-10).
-        trend_template_score: Trend Template score (0-10).
+        hv1_edge: HV1 edge present (50-day highest vol + upper 60% close).
+        hve_edge: HVE edge present (gap up 5%+ with vol 2x).
+        rs_correction_edge: RS Edge present (fell less than 50% of Nifty's decline).
+        n_factor_catalyst: N-Factor edge present (sector/policy catalyst).
         config: Optional config.
 
     Returns:
-        Dict with edge_count, edges list, and individual edge booleans.
+        Dict with edge_count, edges list, tradeable flag, and individual bools.
     """
     if config is None:
         config = load_config()
 
-    es_config = config["edge_scoring"]
-    vcp_config = config["vcp"]
-
     edges = []
 
-    # HV1 Edge: volume = 52-week high volume
     if hv1_edge:
         edges.append("hv1")
-
-    # HVE Edge: volume = all-time highest ever (counts separately from HV1)
     if hve_edge:
         edges.append("hve")
-        if "hv1" not in edges:
-            edges.append("hv1")  # HVE implies HV1
-
-    # RS Edge: held better than Nifty during last correction
-    rs_threshold = es_config["rs_edge_percentile"]
-    rs_edge = rs_percentile >= rs_threshold and rs_new_high
-    if rs_edge:
+    if rs_correction_edge:
         edges.append("rs")
-
-    # N-Factor Edge: 52-week NEW HIGH on price
-    if n_factor_new_high:
+    if n_factor_catalyst:
         edges.append("n_factor")
 
-    # BONUS: All 4 core edges align simultaneously (HV1 + HVE + RS + N-Factor)
-    core_edges = {"hv1", "hve", "rs", "n_factor"}
-    if core_edges.issubset(set(edges)):
-        edges.append("alignment_bonus")
-
-    # VCP Edge: high quality VCP (score >= 8)
-    vcp_edge = vcp_quality_score >= vcp_config["high_quality_threshold"]
-    if vcp_edge:
-        edges.append("vcp")
-
-    # Trend Template Edge: perfect 10/10
-    tt_edge = trend_template_score == 10
-    if tt_edge:
-        edges.append("trend_template")
+    edge_count = len(edges)
+    tradeable = edge_count >= 2  # MD: "Trade only setups with 2+ edges"
 
     return {
-        "edge_count": len(edges),
+        "edge_count": edge_count,
         "edges": edges,
+        "tradeable": tradeable,
         "hv1_edge": "hv1" in edges,
         "hve_edge": "hve" in edges,
         "rs_edge": "rs" in edges,
         "n_factor_edge": "n_factor" in edges,
-        "alignment_bonus": "alignment_bonus" in edges,
-        "vcp_edge": "vcp" in edges,
-        "trend_template_edge": "trend_template" in edges,
     }
 
 
@@ -105,7 +71,7 @@ def compute_composite_score(
     Formula: weighted combination of all factors.
 
     Args:
-        edge_count: Number of edges (0-6).
+        edge_count: Number of edges (0-4).
         vcp_quality_score: VCP quality (0-10).
         trend_template_score: Trend Template score (0-10).
         canslim_score: CANSLIM score (0-7).
@@ -121,7 +87,7 @@ def compute_composite_score(
     es = config["edge_scoring"]
 
     # Normalize each factor to 0-1 range, then apply weight
-    edge_norm = min(edge_count, 6) / 6
+    edge_norm = min(edge_count, 4) / 4
     vcp_norm = min(vcp_quality_score, 10) / 10
     tt_norm = min(trend_template_score, 10) / 10
     canslim_norm = min(canslim_score, 7) / 7

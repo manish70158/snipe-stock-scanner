@@ -9,8 +9,7 @@ universe:
   min_price: 50
   # Market cap floor: mid-cap and above (₹ crore). Institutional participation = better patterns
   min_market_cap_cr: 2000
-  # Liquidity: avg daily volume minimum (shares) OR avg daily turnover (₹ crore)
-  min_avg_daily_volume: 500000
+  # Liquidity: avg daily turnover (₹ crore) - MD only mentions ₹10 Cr turnover
   min_avg_daily_turnover_cr: 10
 
 trend_template:
@@ -18,8 +17,8 @@ trend_template:
   min_above_52w_low_pct: 30
   # Criterion 9: Price must be within this % of 52-week high
   max_below_52w_high_pct: 25
-  # Criterion 10: RS rank must be in top N% of universe
-  rs_top_percentile: 30
+  # Criterion 10: RS rank must be in top N% of universe (MD: top 20%)
+  rs_top_percentile: 20
   # Criterion 4: 200-DMA must be rising for at least N trading days
   ma200_rising_min_days: 22
 
@@ -57,8 +56,6 @@ breakout:
   min_volume_ratio: 1.5
   # Minimum price close above pivot (%)
   min_above_pivot_pct: 1
-  # HV1 lookback period (trading days = 1 year)
-  hv1_lookback_days: 252
   # Approaching breakout threshold (%)
   approaching_pct: 3
 
@@ -83,10 +80,8 @@ canslim:
   min_qualified_score: 5
 
 edge_scoring:
-  # Sector leadership: top N% of sectors by momentum = "leading" (PDF Page 19: top 25%)
-  sector_leader_top_pct: 25
-  # RS edge: must be in top N% for RS edge
-  rs_edge_percentile: 90
+  # RS edge: must be in top N% for RS edge (MD: 80%)
+  rs_edge_percentile: 80
   # Weights for composite score (must sum to 100)
   weight_edge_count: 40
   weight_vcp_quality: 20
@@ -107,17 +102,11 @@ market_regime:
   red_sizing_multiplier: 0.0
 
 position_sizing:
-  # Risk per trade based on edge count (% of equity)
-  risk_1_edge_pct: 0.5
-  risk_2_edge_pct: 1.0
-  risk_3_edge_pct: 1.5
-  risk_4plus_edge_pct: 2.0
   # Maximum stop loss distance (%)
   max_stop_distance_pct: 8
   # Portfolio limits
-  max_position_pct_of_equity: 20
   max_total_risk_pct: 5
-  max_open_positions: 10
+  max_open_positions: 5  # MD: "Never hold > 5 positions"
 
 sell_rules:
   # Offensive: First target profit (%)
@@ -144,8 +133,8 @@ pipeline:
   min_watchlist_size: 5
   # Max stocks from same sector in final list
   max_per_sector: 2
-  # "Not extended" threshold: max % above pivot (PDF NARROW: "within 5%")
-  max_above_pivot_pct: 5
+  # "Not extended" threshold: max % above pivot (MD: "within 10% of pivot")
+  max_above_pivot_pct: 10
   # Choppiness filter: max avg weekly range (%) over 8 weeks
   # Clean bases = 1-3%, choppy action = >6%
   max_avg_weekly_range_pct: 6
