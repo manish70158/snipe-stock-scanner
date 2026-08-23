@@ -71,11 +71,12 @@ def scan(output_json, equity):
     counts = result["stage_counts"]
     console.print(Panel(
         f"Universe: {counts.get('universe', 0)} → "
-        f"TT Pass: {counts.get('trend_template', 0)} → "
-        f"Patterns: {counts.get('pattern_detection', 0)} → "
-        f"Fundamentals: {counts.get('fundamental_screen', 0)} → "
+        f"TT Pass: {counts.get('scan_trend_template', 0)} → "
+        f"Sector Top 3: {counts.get('narrow_sector', 0)} → "
+        f"Patterns: {counts.get('narrow_patterns', 0)} → "
+        f"Fundamentals: {counts.get('narrow_qualified', 0)} → "
         f"[bold]Watchlist: {counts.get('final_watchlist', 0)}[/bold]",
-        title="Pipeline Stages",
+        title="Pipeline Stages (S.N.I.P.E.)",
     ))
 
     # Display watchlist
