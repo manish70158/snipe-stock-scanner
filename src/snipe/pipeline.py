@@ -298,15 +298,17 @@ def run_pipeline(
         # Fallback proxy: RS percentile >= 80
         rs_correction_edge = item["rs_percentile"] >= 80
 
-        # N-Factor: Sector/policy catalyst (qualitative, defaults to False)
-        # Can't be automated from price data alone
-        n_factor_catalyst = False
+        # N-Factor: Sector/policy catalyst
+        # MD: "Stock in leading sector/theme"
+        # Automated using sector momentum: top 3 sectors by 6-month returns
+        stock_sector = sector_map.get(item["symbol"], "Unknown")
+        n_factor_catalyst = stock_sector in leading_sectors
 
         edge_result = identify_edges(
             hv1_edge=bo.get("hv1_edge", False),
             hve_edge=bo.get("hve_edge", False),
             rs_correction_edge=rs_correction_edge,
-            n_factor_catalyst=False,  # qualitative — requires manual assessment
+            n_factor_catalyst=n_factor_catalyst,
             config=config,
         )
 
@@ -318,8 +320,6 @@ def run_pipeline(
             volume_ratio=bo.get("volume_ratio", 1.0),
             config=config,
         )
-
-        stock_sector = sector_map.get(item["symbol"], "Unknown")
         sector_rank = sector_rankings["sector_ranks"].get(stock_sector, 50)
 
         # Stop placement: MD says use last contraction low (C3 low), not base_low

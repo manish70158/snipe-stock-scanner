@@ -24,9 +24,10 @@ The system SHALL evaluate each stock for exactly 4 edge factors, assigning 1 poi
    - Automated proxy: stock RS percentile ≥ 80th percentile
 
 4. **N-Factor — News Catalyst (Sector/Policy Tailwind)**
-   - A macro or sector-level catalyst creating sustained demand (PLI scheme, budget allocation, global theme)
+   - Stock is in one of the top 3 performing sectors by 6-month median returns
+   - MD: "Stock in leading sector/theme"
+   - Automated using sector momentum rankings (computed from constituent stock returns)
    - N-Factor ALONE is never enough — it must combine with HV1, HVE, or RS Edge
-   - This is qualitative and requires manual assessment (automated scan sets to False)
 
 **Maximum edge count: 4. Minimum to trade: 2.**
 
