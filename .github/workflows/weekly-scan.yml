@@ -133,3 +133,10 @@ jobs:
             scan_result.json
             regime_result.json
           retention-days: 90
+
+      - name: Upload database as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: snipe-db-${{ github.run_number }}
+          path: snipe.db
+          retention-days: 90
