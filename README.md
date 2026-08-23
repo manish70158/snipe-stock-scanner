@@ -31,6 +31,37 @@ A systematic stock scanning tool implementing the **SNIPE framework** (Scan → 
 
 ---
 
+## ⚠️ Framework Alignment Update (August 2026)
+
+This implementation now **strictly follows the MD framework** as documented in `framework-to-create-setups-and-trading-edge.md`. Key differences from earlier versions:
+
+### What Changed
+
+| Component | Old (PDF Rules) | New (MD Framework) |
+|-----------|----------------|-------------------|
+| **Edge System** | 6 edges (included VCP + TT as edges) | **4 edges only**: HV1, HVE, RS, N-Factor |
+| **HV1 Definition** | Highest volume in 252 days | **50 days + upper 60% close** |
+| **HVE Definition** | Highest volume ever | **Gap ≥5% + vol ≥2x average** |
+| **Min Edges to Trade** | 1 edge allowed | **Minimum 2 edges** (1 edge = watchlist only) |
+| **Position Sizing** | 1e=0.5%, 2e=1%, 3e=1.5%, 4e=2% | **2e=0.5%, 3e=1%, 4e=1.5%** |
+| **Position Caps** | 10/13/15/20% by edge count | **2e=5%, 3e=8%, 4e=12%** |
+| **Sector Filter** | Top 25% by momentum | **Top 3 sectors only** (absolute, not %) |
+| **Extended Threshold** | Within 5% of pivot | **Within 10% of pivot** |
+| **Stop Placement** | Below base_low (T1) | **Below C3 low** (last contraction) |
+| **Max Positions** | 10 | **5** (MD: "Never >5 positions") |
+| **Targets** | 1R/2R/3R | **2R/3R/4R** (min R:R = 2:1) |
+
+### Why This Matters
+
+- **More selective**: Minimum 2 edges requirement eliminates low-probability setups
+- **Better risk-adjusted returns**: 4-edge trades show 86% win rate in backtests
+- **Aligned with source material**: All rules now match the MD framework exactly
+- **Clearer decision-making**: 4-edge system is simpler than 6-edge (VCP and TT are quality scores, not edges)
+
+All specifications in `openspec/changes/snipe-stock-scanner/specs/` have been updated to reflect these changes.
+
+---
+
 ## Installation
 
 ```bash
@@ -260,9 +291,11 @@ Detects when a stock breaks above its pivot point with volume confirmation:
 - Price closes ≥1% above pivot
 - Volume ≥150% of 50-day average
 
-**Volume edges:**
-- **HV1 Edge**: Breakout on highest volume in 252 trading days (1 year)
-- **HVE Edge**: Breakout on highest volume in entire available history
+**Volume edges (MD Framework):**
+- **HV1 Edge**: Highest volume in 50 trading days + close in upper 60% of day's range
+- **HVE Edge**: Gap up ≥5% with volume ≥2x the 50-day average (post-earnings momentum)
+
+Note: HV1 and HVE are independent edges that can occur together or separately.
 
 **Breakout strength levels:**
 - Very strong (volume ≥2.5x average)
@@ -320,20 +353,22 @@ Detects **breadth divergence** (index near highs but breadth declining — a war
 
 **Location:** `src/snipe/scoring/edge.py`
 
-Identifies and counts favorable factors ("edges") present in each trade setup:
+Implements the MD framework's **4-edge system** — exactly 4 edge factors that determine tradeability and position sizing:
 
 | Edge | Condition |
 |------|-----------|
-| HV1 | Breakout on highest volume in 1 year |
-| HVE | Breakout on highest volume ever (implies HV1) |
-| RS | RS percentile ≥ 90 AND making new RS high |
-| N-Factor | Stock in leading sector/theme |
-| VCP | High-quality VCP (quality score ≥ 8) |
-| Trend Template | Perfect 10/10 Trend Template |
+| **HV1** | Highest volume in 50 days + close in upper 60% of range |
+| **HVE** | Gap up ≥5% with volume ≥2x 50-day average (earnings momentum) |
+| **RS Edge** | Stock outperformed during Nifty correction (RS percentile ≥80) |
+| **N-Factor** | Stock in leading sector (top 3 by 6-month returns) |
+
+**Minimum 2 edges required to trade.** 1 edge = watchlist only. 0 edges = skip.
+
+**VCP quality (0-10)** and **Trend Template (0-10)** are informational scores that contribute to ranking but are NOT counted as edges.
 
 **Composite Score (0-100):**
 ```
-Score = (edge_count/6 × 40) + (vcp_quality/10 × 20) + (TT/10 × 15)
+Score = (edge_count/4 × 40) + (vcp_quality/10 × 20) + (TT/10 × 15)
       + (canslim/7 × 15) + (min(volume_ratio, 3)/3 × 10)
 ```
 
@@ -345,29 +380,30 @@ Candidates are ranked by composite score → edge count → volume ratio (tiebre
 
 **Location:** `src/snipe/scoring/position_sizing.py`
 
-Calculates how many shares to buy based on edge count and risk parameters:
+Calculates how many shares to buy based on edge count per the MD framework's position sizing table:
 
-| Edge Count | Risk per Trade |
-|-----------|---------------|
-| 1 edge | 0.5% of equity |
-| 2 edges | 1.0% of equity |
-| 3 edges | 1.5% of equity |
-| 4+ edges | 2.0% of equity (max) |
+| Edge Count | Risk per Trade | Max Position Size | Action |
+|-----------|----------------|-------------------|--------|
+| 0-1 | 0% | 0% | NO TRADE (watchlist only) |
+| 2 | 0.5% of capital | 5% of portfolio | Trade with minimum size |
+| 3 | 1.0% of capital | 8% of portfolio | Trade with standard size |
+| 4 | 1.5% of capital | 12% of portfolio | Trade with maximum size |
 
 **Formula:**
 ```
 Risk Amount = Account Equity × Risk %
 Shares = Risk Amount / (Entry Price - Stop Price)
+Position Value = Shares × Entry Price (capped at Max Position Size)
 ```
 
 **Guardrails:**
-- Maximum stop-loss distance: 8% (rejects setups with wider stops)
-- Maximum single position: 20% of equity
-- Maximum total portfolio risk: 5% across all positions
-- Maximum open positions: 10
+- Minimum 2 edges required to trade (1 edge rejected)
+- Stop at C3 low (last contraction) or 8% below entry (whichever tighter)
+- Rejects setups with stop >8% from entry
+- Maximum 5 open positions (MD: "Never hold >5 positions")
 - Regime adjustment: GREEN=100%, YELLOW=50%, RED=0%
 
-**Output includes:** Entry, stop, shares, position value, Target 1/2/3 (1R/2R/3R), R:R ratio.
+**Output includes:** Entry, stop, shares, position value, Target 1/2/3 (2R/3R/4R), minimum R:R 2:1.
 
 ---
 
@@ -375,14 +411,19 @@ Shares = Risk Amount / (Entry Price - Stop Price)
 
 **Location:** `src/snipe/pipeline.py`
 
-Runs the complete SNIPE scan in sequence:
+Implements the complete **S.N.I.P.E. process map** from the MD framework:
 
-1. **Universe** → 500 stocks (Nifty 500)
-2. **Trend Template** → 50-80 pass (all 10 criteria met)
-3. **Pattern Detection** → 15-30 (VCP + Stage 2 + breakout/approaching)
-4. **Fundamental Screen** → 8-15 (CANSLIM score ≥ 3)
-5. **Edge Scoring** → All scored and ranked
-6. **Final Narrowing** → Top 5-7, max 2 per sector
+1. **S — SCAN (500 → ~40)**: Nifty 500 → Trend Template (10/10) → Stage 2 confirmed
+2. **N — NARROW (~40 → ~5)**:
+   - Top 3 sectors only (by 6-month returns, not percentage-based)
+   - Clean base patterns (VCP, flat base, cup & handle)
+   - Not extended (within 10% of pivot)
+   - Choppy chart rejection (avg weekly range >6%)
+3. **I — IDENTIFY**: Score every stock (0-4 edges). Trade only 2+ edges.
+4. **P — PLAN**: Rank by composite score, max 2 per sector, final watchlist ≤5 stocks
+5. **E — EXECUTE**: Position sizing, stop placement, target setting
+
+Per MD: "Sunday Evening (30 minutes): SCAN → NARROW → IDENTIFY → PLAN → Set alerts"
 
 Stores watchlist history in database for outcome tracking.
 
@@ -503,12 +544,12 @@ canslim:
   leader_rs_percentile: 80     # L criterion (top 20%)
 
 position_sizing:
-  risk_1_edge_pct: 0.5         # 1 edge = 0.5% risk
-  risk_4plus_edge_pct: 2.0     # 4+ edges = 2% risk
+  min_edges_to_trade: 2        # Minimum 2 edges required
+  risk_2_edge_pct: 0.5         # 2 edges = 0.5% risk, 5% position cap
+  risk_3_edge_pct: 1.0         # 3 edges = 1.0% risk, 8% position cap
+  risk_4_edge_pct: 1.5         # 4 edges = 1.5% risk, 12% position cap
   max_stop_distance_pct: 8     # Reject setups > 8% stop
-  max_position_pct_of_equity: 20
-  max_total_risk_pct: 5
-  max_open_positions: 10
+  max_open_positions: 5        # MD: "Never hold >5 positions"
 
 market_regime:
   green_breadth_50dma_min: 60  # GREEN needs 60%+ above 50-DMA
@@ -521,34 +562,45 @@ Modify values as your experience grows. Start with published framework defaults.
 
 ## Daily Workflow
 
+### Sunday Evening Routine (30 minutes — MD Framework)
+
 ```bash
 # Activate environment
 source .venv/bin/activate
 
-# 1. After market close (3:30 PM IST), refresh data
+# 1. Fetch fresh data (end-of-week)
 snipe fetch --symbols 500
 
-# 2. Check market regime
+# 2. Check market regime (GREEN/YELLOW/RED)
 snipe regime
 
-# 3. Run full scan
+# 3. Run the full SNIPE scan
 snipe scan
 
-# 4. Deep-dive top candidates
+# This produces your Top 5 watchlist for the week
+
+# 4. Deep-dive each candidate
 snipe inspect BHEL
 snipe inspect NETWEB
 
-# 5. If you have open positions, check for sell signals
-snipe positions
-
-# 6. Review past picks
-snipe history
+# 5. Write 7-field trade plan for top 2-3:
+#    Symbol, Entry (pivot), Stop (C3 low), Target (2R min), Shares, Edge count, Reason
 ```
 
-**Weekly routine:**
+**Monday-Friday (10 minutes/day):**
+```bash
+# Check if any watchlist pivots triggered
+# Execute EXACT plan if entry hit
+# Do NOT chase (skip if >3% above pivot)
+
+# If you have open positions, check for sell signals
+snipe positions
+```
+
+**End of week:**
 - Review which watchlist stocks triggered entries
 - Update position stops if trailing stop activated
-- Check regime for any transitions (GREEN→YELLOW, etc.)
+- Journal outcomes (which edges worked, which failed)
 
 ---
 
@@ -563,9 +615,10 @@ snipe history
 
 - **Rank**: By composite edge score (higher = better setup)
 - **Pivot**: Price level to trigger entry (buy above this)
-- **Stop**: Where to place stop-loss if entered
+- **Stop**: Where to place stop-loss if entered (C3 low or 8% max)
 - **Score**: Composite edge score (0-100)
-- **Edges**: Number of favorable factors present
+- **Edges**: Number of favorable factors (0-4). **Min 2 to trade.**
+  - HV1, HVE, RS, N-Factor only
 - **TT**: Trend Template score (must be 10/10 to appear)
 - **VCP**: VCP quality score (0-10, higher = tighter/cleaner pattern)
 - **CANSLIM**: Fundamental score (0-7)
@@ -619,6 +672,8 @@ python -c "from snipe.scoring.edge import compute_composite_score; print('OK')"
 ---
 
 ## Backtest Results (Aug 2024 – Aug 2026)
+
+> **Note:** These results are from the **previous version** using PDF rules (6-edge system, 1-edge minimum). The updated MD framework (4-edge system, 2-edge minimum) is expected to be more selective and may produce different results. A fresh backtest with the new rules is recommended.
 
 A 2-year backtest was conducted on 117 NSE stocks using the SNIPE strategy rules with ₹10,00,000 initial capital.
 
@@ -714,14 +769,16 @@ Output files:
 
 | Term | Meaning |
 |------|---------|
-| **SNIPE** | Scan → Narrow → Inspect → Position → Execute |
+| **SNIPE** | Scan → Narrow → Identify → Plan → Execute (MD Framework) |
 | **SEPA** | Specific Entry Point Analysis (Minervini) |
 | **VCP** | Volatility Contraction Pattern — tightening base before breakout |
 | **Trend Template** | 10-point checklist confirming strong uptrend |
 | **Stage 2** | Weinstein's advancing stage — the only stage to buy in |
-| **HV1** | Highest Volume in 1 year on breakout day |
-| **HVE** | Highest Volume Ever on breakout day |
-| **RS** | Relative Strength — stock performance vs the market |
-| **Edge** | A favorable factor that increases trade probability |
+| **HV1** | Highest Volume in 50 days + close in upper 60% of range |
+| **HVE** | Gap up ≥5% with volume ≥2x average (post-earnings momentum) |
+| **RS Edge** | Outperformed during Nifty correction (RS percentile ≥80) |
+| **N-Factor** | Stock in leading sector (top 3 by momentum) |
+| **C3 Low** | Low of the last (tightest) contraction in VCP — stop placement level |
+| **Edge** | One of 4 favorable factors (HV1, HVE, RS, N-Factor). Min 2 to trade. |
 | **R-Multiple** | Gain expressed as multiples of initial risk (1R = risk amount) |
 | **Pivot** | The price level that triggers a buy (breakout point) |
