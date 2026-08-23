@@ -70,12 +70,12 @@ The system SHALL evaluate supply/demand dynamics through:
 
 ### Requirement: L — Leader (Relative Strength)
 
-The system SHALL rank all Nifty 500 stocks by Relative Strength (RS) — the stock's price performance over the past 12 months relative to the Nifty 500 index. A stock passes the L criterion when its RS rank is in the top 20% of the universe.
+The system SHALL rank all Nifty 500 stocks by Relative Strength (RS) — the stock's price performance over the past 6 months (126 trading days) relative to the Nifty 500 index. A stock passes the L criterion when its RS rank is in the top 20% of the universe.
 
-RS calculation: (Stock 12M return / Nifty 500 12M return) × 100, ranked percentile.
+RS calculation: (Stock 6M return / Nifty 500 6M return) × 100, ranked percentile.
 
 #### Scenario: Market leader
-- **WHEN** a stock's 12-month return places it in the top 10% of Nifty 500 by relative performance
+- **WHEN** a stock's 6-month return places it in the top 10% of Nifty 500 by relative performance
 - **THEN** the system SHALL score l_criterion=true with rs_rank_percentile=90
 
 #### Scenario: Laggard

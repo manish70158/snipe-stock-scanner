@@ -10,7 +10,7 @@ The system SHALL evaluate each stock for the following edge factors, assigning 1
 
 1. **HV1 Edge**: Breakout on highest volume in 1 year (252 days)
 2. **HVE Edge**: Breakout on highest volume ever in available history
-3. **RS Edge**: Stock RS in top 10% of Nifty 500 AND making a new RS high simultaneously with price high
+3. **RS Edge**: Stock 6-month RS in top 10% of Nifty 500 AND making a new RS high simultaneously with price high
 4. **N-Factor Edge**: Stock in a leading sector/theme (PLI beneficiary, new high in sector RS)
 5. **VCP Edge**: High-quality VCP pattern (quality score ≥8/10) with tight final contraction ≤8%
 6. **Trend Template Edge**: Perfect 10/10 Trend Template score

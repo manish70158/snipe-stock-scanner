@@ -185,7 +185,7 @@ A stock **must pass all 10** to qualify. Score: 0-10. Only 10/10 passes.
 
 Also includes:
 - **SMA calculation** (50, 150, 200-day simple moving averages)
-- **Relative Strength ranking** — 12-month return percentile vs all Nifty 500 stocks
+- **Relative Strength ranking** — 6-month return percentile vs all Nifty 500 stocks
 
 ---
 
