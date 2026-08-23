@@ -108,38 +108,63 @@ snipe scan --json
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        SNIPE PIPELINE                            │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  Nifty 500 Universe (500 stocks)                                │
-│         │                                                        │
-│         ▼                                                        │
-│  ┌─────────────────┐                                            │
-│  │ Trend Template  │  10-point check → ~50-80 pass              │
-│  └────────┬────────┘                                            │
-│           ▼                                                      │
-│  ┌─────────────────┐                                            │
-│  │ VCP + Stage 2   │  Pattern + Stage confirmation → ~15-30     │
-│  └────────┬────────┘                                            │
-│           ▼                                                      │
-│  ┌─────────────────┐                                            │
-│  │ CANSLIM Screen  │  Fundamental criteria → ~8-15              │
-│  └────────┬────────┘                                            │
-│           ▼                                                      │
-│  ┌─────────────────┐     ┌──────────────────┐                  │
-│  │ Edge Scoring    │◄────│ Market Regime    │                   │
-│  └────────┬────────┘     │ (GREEN/YELLOW/   │                  │
-│           ▼              │  RED gate)       │                   │
-│  ┌─────────────────┐     └──────────────────┘                  │
-│  │ Narrowing       │  Sector diversification → 5-7 stocks      │
-│  └────────┬────────┘                                            │
-│           ▼                                                      │
-│  ┌─────────────────┐                                            │
-│  │ Position Sizing │  Edge-based risk allocation                │
-│  └─────────────────┘                                            │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│              S.N.I.P.E. PIPELINE (MD Framework)                  │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  Nifty 500 Universe (500 stocks)                                 │
+│         │                                                         │
+│         ▼                                                         │
+│  ╔═══════════════════════════════════════════════════════════╗  │
+│  ║ S — SCAN                                   500 → ~30-40    ║  │
+│  ╠═══════════════════════════════════════════════════════════╣  │
+│  ║ • Trend Template (10/10 pass)                             ║  │
+│  ║ • Stage 2 confirmed                                        ║  │
+│  ║ • CANSLIM fundamentals (EPS ≥20%, ROE, RS top 20%)        ║  │
+│  ║ • Price > ₹50, Volume > ₹10Cr, MCap > ₹2,000Cr            ║  │
+│  ╚════════════════════════╤══════════════════════════════════╝  │
+│                           ▼                                       │
+│  ╔═══════════════════════════════════════════════════════════╗  │
+│  ║ N — NARROW                                  ~40 → ~5-10    ║  │
+│  ╠═══════════════════════════════════════════════════════════╣  │
+│  ║ • Top 3 sectors only (by 6-month returns)                 ║  │
+│  ║ • Clean base patterns (VCP, flat, cup & handle)           ║  │
+│  ║ • Not choppy (avg weekly range ≤6%)                       ║  │
+│  ║ • Not extended (within 10% of pivot)                      ║  │
+│  ║ • Institutional accumulation visible                      ║  │
+│  ╚════════════════════════╤══════════════════════════════════╝  │
+│                           ▼                                       │
+│  ╔═══════════════════════════════════════════════════════════╗  │
+│  ║ I — IDENTIFY EDGES             (score 0-4 edges each)     ║  │
+│  ╠═══════════════════════════════════════════════════════════╣  │
+│  ║ • HV1 (highest vol in 50 days + upper 60% close)          ║  │
+│  ║ • HVE (gap ≥5% + vol ≥2x on earnings)                     ║  │
+│  ║ • RS Edge (outperformed during correction)      ┌───────┐ ║  │
+│  ║ • N-Factor (leading sector catalyst)            │ Market│ ║  │
+│  ║                                                  │Regime │ ║  │
+│  ║ Rule: Trade only 2+ edges (1 edge = watchlist)  │ Gate  │ ║  │
+│  ╚════════════════════════╤═════════════════════════└───────┘ ║  │
+│                           ▼                                       │
+│  ╔═══════════════════════════════════════════════════════════╗  │
+│  ║ P — PLAN THE TRADE                          ~10 → ≤5      ║  │
+│  ╠═══════════════════════════════════════════════════════════╣  │
+│  ║ • Rank by composite score (edge count priority)           ║  │
+│  ║ • Enforce sector diversification (max 2 per sector)       ║  │
+│  ║ • Final watchlist: ≤5 stocks maximum                      ║  │
+│  ║ • Position size: 2e=0.5%, 3e=1%, 4e=1.5%                  ║  │
+│  ║ • Stop: C3 low or 8% max (whichever tighter)              ║  │
+│  ║ • Target: Minimum R:R = 2:1 (entry + 2R)                  ║  │
+│  ╚════════════════════════╤══════════════════════════════════╝  │
+│                           ▼                                       │
+│  ╔═══════════════════════════════════════════════════════════╗  │
+│  ║ E — EXECUTE WITH DISCIPLINE                               ║  │
+│  ╠═══════════════════════════════════════════════════════════╣  │
+│  ║ • Limit orders only (never chase >3% past pivot)          ║  │
+│  ║ • Execute EXACT plan (no emotional decisions)             ║  │
+│  ║ • Store watchlist history for journaling                  ║  │
+│  ╚═══════════════════════════════════════════════════════════╝  │
+│                                                                   │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 **Project structure:**
