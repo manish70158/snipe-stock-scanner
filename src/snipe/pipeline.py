@@ -212,14 +212,14 @@ def run_pipeline(
         tt = item["tt_result"]
 
         # N-Factor: check if stock is at 52-week new high
-        n_criterion = item["canslim_result"].get("n_criterion", False)
+        n_criterion = bool(item["canslim_result"].get("n_criterion", False))
 
         edge_result = identify_edges(
             hv1_edge=bo.get("hv1_edge", False),
             hve_edge=bo.get("hve_edge", False),
             rs_percentile=item["rs_percentile"],
             rs_new_high=item["rs_percentile"] >= 90,
-            n_factor_new_high=n_criterion is True,
+            n_factor_new_high=n_criterion,
             vcp_quality_score=vcp.get("quality_score", 0),
             trend_template_score=tt.get("score", 0),
             config=config,
