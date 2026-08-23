@@ -75,11 +75,11 @@ jobs:
           if not watchlist:
               msg += "⚠️ No candidates found this week.\n"
           else:
-              # Summary table
+              # Summary table (MD Framework: 2R/3R/4R targets)
               msg += "<b>🎯 Watchlist Summary:</b>\n"
               msg += "<pre>\n"
-              msg += f"{'#':<2} {'Symbol':<10} {'CMP':<6} {'Entry':<6} {'SL':<6} {'T1':<6} {'T2':<6}\n"
-              msg += "-" * 50 + "\n"
+              msg += f"{'#':<2} {'Symbol':<10} {'CMP':<6} {'Entry':<6} {'SL':<6} {'T1(2R)':<7} {'T2(3R)':<7}\n"
+              msg += "-" * 52 + "\n"
               for item in watchlist:
                   sizing = item.get("position_sizing", {})
                   t1 = sizing.get("target_1", 0)
@@ -90,10 +90,11 @@ jobs:
                       f"{item.get('current_price', 0):<6.0f} "
                       f"{item.get('pivot_price', 0):<6.0f} "
                       f"{item.get('stop_price', 0):<6.0f} "
-                      f"{t1:<6.0f} "
-                      f"{t2:<6.0f}\n"
+                      f"{t1:<7.0f} "
+                      f"{t2:<7.0f}\n"
                   )
-              msg += "</pre>\n\n"
+              msg += "</pre>\n"
+              msg += "<i>MD Framework: Minimum R:R = 2:1 (T1), Ideal = 3:1 (T2)</i>\n\n"
 
               # Scoring metrics table
               msg += "<b>📈 Scoring Metrics:</b>\n"
@@ -157,63 +158,92 @@ jobs:
               msg += "</pre>\n"
               msg += "<i>C=Earnings A=Annual N=NewHigh S=Supply L=Leader I=Inst M=Market</i>\n\n"
 
-              # Position sizing table
+              # Position sizing table (MD Framework)
               msg += "<b>💰 Position Sizing:</b>\n"
               msg += "<pre>\n"
-              msg += f"{'#':<2} {'Symbol':<10} {'Qty':<6} {'Value':<8} {'Risk%':<6} {'R:R':<4}\n"
-              msg += "-" * 40 + "\n"
+              msg += f"{'#':<2} {'Symbol':<10} {'Edges':<6} {'Qty':<6} {'Value':<8} {'Risk%':<6} {'R:R':<4}\n"
+              msg += "-" * 48 + "\n"
               for item in watchlist:
                   sizing = item.get("position_sizing", {})
+                  edge_count = item.get("edge_count", 0)
                   if sizing.get("valid"):
                       msg += (
                           f"{item.get('rank', ''):<2} "
                           f"{item['symbol']:<10} "
+                          f"{edge_count:<6} "
                           f"{sizing.get('shares', 0):<6} "
                           f"{sizing.get('position_value', 0):<8.0f} "
                           f"{sizing.get('risk_percent', 0):<6.1f} "
                           f"{sizing.get('risk_reward_ratio', 0):<4.1f}\n"
                       )
                   else:
+                      reason = sizing.get('reason', 'N/A')
+                      # Translate reason codes to readable messages
+                      reason_map = {
+                          "insufficient_edges": "WATCH",
+                          "stop_too_wide": ">8%SL",
+                          "market_regime_red": "REGIME",
+                      }
+                      reason_short = reason_map.get(reason, reason[:10])
                       msg += (
                           f"{item.get('rank', ''):<2} "
                           f"{item['symbol']:<10} "
+                          f"{edge_count:<6} "
                           f"{'--':<6} "
                           f"{'--':<8} "
                           f"{'--':<6} "
-                          f"{sizing.get('reason', 'N/A')}\n"
+                          f"{reason_short}\n"
                       )
-              msg += "</pre>\n\n"
+              msg += "</pre>\n"
+              msg += "<i>MD: 2e=0.5%/5%, 3e=1%/8%, 4e=1.5%/12% | WATCH=1 edge (watchlist only)</i>\n\n"
 
-              # Maximum Conviction Alert (4+ edges)
-              max_conviction = [item for item in watchlist if item.get("edge_count", 0) >= 4]
+              # Maximum Conviction Alert (4 edges — MD Framework)
+              max_conviction = [item for item in watchlist if item.get("edge_count", 0) == 4]
               if max_conviction:
                   msg += "🚨🚨🚨 <b>MAXIMUM CONVICTION ALERT</b> 🚨🚨🚨\n"
                   msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                  msg += "<b>4+ Edges Detected — 2% Risk Allocation</b>\n\n"
+                  msg += "<b>4 Edges Detected — 1.5% Risk Allocation</b>\n\n"
                   for item in max_conviction:
                       edges_list = item.get("edges", [])
                       edges_str = ", ".join(edges_list) or "none"
                       sizing = item.get("position_sizing", {})
                       t1 = sizing.get("target_1", 0)
                       t2 = sizing.get("target_2", 0)
-                      msg += f"  ⚡ <b>{item['symbol']}</b> — {item.get('edge_count', 0)} EDGES\n"
-                      msg += f"     Entry: ₹{item.get('pivot_price', 0):.0f} | SL: ₹{item.get('stop_price', 0):.0f} | T1: ₹{t1:.0f} | T2: ₹{t2:.0f}\n"
+                      t3 = sizing.get("target_3", 0)
+                      msg += f"  ⚡ <b>{item['symbol']}</b> — 4 EDGES\n"
+                      msg += f"     Entry: ₹{item.get('pivot_price', 0):.0f} | SL: ₹{item.get('stop_price', 0):.0f} | T1: ₹{t1:.0f} (2R) | T2: ₹{t2:.0f} (3R) | T3: ₹{t3:.0f} (4R)\n"
                       msg += f"     Edges: [{edges_str}]\n"
                       msg += f"     Score: {item.get('composite_score', 0):.0f}/100 | VCP: {item.get('vcp_quality', 0):.0f}/10 | RS: Top {100 - item.get('rs_percentile', 50):.0f}%\n"
                       if sizing.get("valid"):
-                          msg += f"     Size: {sizing.get('shares', 0)} shares (₹{sizing.get('position_value', 0):,.0f}) | Risk: 2.0%\n"
+                          risk_pct = sizing.get('risk_percent', 1.5)
+                          msg += f"     Size: {sizing.get('shares', 0)} shares (₹{sizing.get('position_value', 0):,.0f}) | Risk: {risk_pct:.1f}% | Position: {sizing.get('position_pct_of_equity', 0):.1f}%\n"
                       msg += "\n"
                   msg += "  <i>⚠️ Backtest: 4-edge setups = 86% win rate, +1.03R avg</i>\n"
                   msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
 
-              # Edges detail
-              msg += "<b>🔑 Edges Detail:</b>\n"
+              # Edges detail (MD Framework: 4-edge system)
+              msg += "<b>🔑 Edges Detail (HV1, HVE, RS, N-Factor):</b>\n"
               for item in watchlist:
                   edges_str = ", ".join(item.get("edges", [])) or "none"
+                  edge_count = item.get("edge_count", 0)
                   stage = item.get("stage", "?")
                   bo = "BO" if item.get("breakout_detected") else "Near" if item.get("approaching_breakout") else "Wait"
-                  conviction = " 🔥" if item.get("edge_count", 0) >= 4 else ""
-                  msg += f"  {item.get('rank', '')}. <b>{item['symbol']}</b>: [{edges_str}] | {stage} | {bo}{conviction}\n"
+
+                  # MD Framework edge markers
+                  if edge_count == 4:
+                      conviction = " 🔥🔥🔥 MAX"
+                  elif edge_count == 3:
+                      conviction = " 🔥🔥"
+                  elif edge_count == 2:
+                      conviction = " ✓"
+                  elif edge_count == 1:
+                      conviction = " ⚠️ WATCHLIST ONLY"
+                  else:
+                      conviction = " ✗ SKIP"
+
+                  msg += f"  {item.get('rank', '')}. <b>{item['symbol']}</b>: [{edges_str}]{conviction} | {stage} | {bo}\n"
+
+              msg += "\n<i>MD Framework: Min 2 edges to trade. 2e=0.5%, 3e=1%, 4e=1.5% risk</i>\n"
 
           msg += f"\n<i>Scan completed at {datetime.now().strftime('%H:%M UTC')}</i>"
 
