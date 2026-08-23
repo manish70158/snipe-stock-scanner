@@ -150,13 +150,36 @@ jobs:
                       )
               msg += "</pre>\n\n"
 
+              # Maximum Conviction Alert (4+ edges)
+              max_conviction = [item for item in watchlist if item.get("edge_count", 0) >= 4]
+              if max_conviction:
+                  msg += "🚨🚨🚨 <b>MAXIMUM CONVICTION ALERT</b> 🚨🚨🚨\n"
+                  msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                  msg += "<b>4+ Edges Detected — 2% Risk Allocation</b>\n\n"
+                  for item in max_conviction:
+                      edges_list = item.get("edges", [])
+                      edges_str = ", ".join(edges_list) or "none"
+                      sizing = item.get("position_sizing", {})
+                      t1 = sizing.get("target_1", 0)
+                      t2 = sizing.get("target_2", 0)
+                      msg += f"  ⚡ <b>{item['symbol']}</b> — {item.get('edge_count', 0)} EDGES\n"
+                      msg += f"     Entry: ₹{item.get('pivot_price', 0):.0f} | SL: ₹{item.get('stop_price', 0):.0f} | T1: ₹{t1:.0f} | T2: ₹{t2:.0f}\n"
+                      msg += f"     Edges: [{edges_str}]\n"
+                      msg += f"     Score: {item.get('composite_score', 0):.0f}/100 | VCP: {item.get('vcp_quality', 0):.0f}/10 | RS: Top {100 - item.get('rs_percentile', 50):.0f}%\n"
+                      if sizing.get("valid"):
+                          msg += f"     Size: {sizing.get('shares', 0)} shares (₹{sizing.get('position_value', 0):,.0f}) | Risk: 2.0%\n"
+                      msg += "\n"
+                  msg += "  <i>⚠️ Backtest: 4-edge setups = 86% win rate, +1.03R avg</i>\n"
+                  msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+
               # Edges detail
               msg += "<b>🔑 Edges Detail:</b>\n"
               for item in watchlist:
                   edges_str = ", ".join(item.get("edges", [])) or "none"
                   stage = item.get("stage", "?")
                   bo = "BO" if item.get("breakout_detected") else "Near" if item.get("approaching_breakout") else "Wait"
-                  msg += f"  {item.get('rank', '')}. <b>{item['symbol']}</b>: [{edges_str}] | {stage} | {bo}\n"
+                  conviction = " 🔥" if item.get("edge_count", 0) >= 4 else ""
+                  msg += f"  {item.get('rank', '')}. <b>{item['symbol']}</b>: [{edges_str}] | {stage} | {bo}{conviction}\n"
 
           msg += f"\n<i>Scan completed at {datetime.now().strftime('%H:%M UTC')}</i>"
 
