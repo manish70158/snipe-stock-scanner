@@ -168,6 +168,10 @@ def run_pipeline(
     stage_counts["narrow_sector"] = len(sector_filtered)
 
     # N.2: Clean chart patterns — VCP/base detection + Stage 2 confirmation
+    pipeline_config = config.get("pipeline", {})
+    max_above_pivot = pipeline_config.get("max_above_pivot_pct", 5)
+    max_weekly_range = pipeline_config.get("max_avg_weekly_range_pct", 6.0)
+
     pattern_candidates = []
     for item in sector_filtered:
         symbol = item["symbol"]
@@ -190,17 +194,22 @@ def run_pipeline(
         # Breakout detection
         bo_result = detect_breakout(df, pivot_price, config)
 
+        # N.2b: "Clean, tradeable chart" — reject choppy/V-shaped action
+        # PDF: "Avoid: V-shaped recoveries, choppy, wide-swinging action"
+        if _is_choppy_chart(df, max_avg_weekly_range_pct=max_weekly_range):
+            continue
+
         # Include if VCP detected OR approaching/breaking out of pivot
         if (vcp_result["vcp_detected"] or
                 bo_result["breakout_detected"] or
                 bo_result["approaching_breakout"]):
 
-            # N.3: "Not extended" check (FOMO bias fix)
-            # PDF: "If it's >10% extended past pivot, it's not your trade"
+            # N.4: "Not extended" check (PDF NARROW: "within 5% of pivot")
+            # "If already 20-30% above the last proper base = too risky"
             current_price = float(df["close"].astype(float).iloc[-1])
             pct_above_pivot = ((current_price - pivot_price) / pivot_price) * 100
-            if pct_above_pivot > 10:
-                continue  # Too extended — not tradeable
+            if pct_above_pivot > max_above_pivot:
+                continue  # Extended beyond pivot threshold — R:R deteriorates
 
             pattern_candidates.append({
                 **item,
@@ -381,6 +390,47 @@ def run_pipeline(
             "sector_returns": sector_rankings["sector_returns"],
         },
     }
+
+
+def _is_choppy_chart(df, lookback_weeks: int = 8, max_avg_weekly_range_pct: float = 6.0) -> bool:
+    """Detect choppy, wide-swinging price action (PDF: "Avoid V-shaped, choppy").
+
+    A chart is "choppy" if the average weekly price range over the last N weeks
+    exceeds a threshold. Clean bases have tight weekly ranges (1-3%).
+    Choppy/V-shaped action shows wide swings (>6%).
+
+    Args:
+        df: Price DataFrame with high, low, close columns.
+        lookback_weeks: Number of weeks to evaluate.
+        max_avg_weekly_range_pct: Maximum average weekly range (%) for a clean chart.
+
+    Returns:
+        True if chart is choppy (should be rejected), False if clean.
+    """
+    lookback_days = lookback_weeks * 5
+    if len(df) < lookback_days:
+        return False  # Not enough data, don't reject
+
+    recent = df.tail(lookback_days)
+    high = recent["high"].astype(float)
+    low = recent["low"].astype(float)
+    close = recent["close"].astype(float)
+
+    # Compute weekly ranges (group into 5-day chunks)
+    weekly_ranges = []
+    for i in range(0, len(recent) - 4, 5):
+        week_high = high.iloc[i:i + 5].max()
+        week_low = low.iloc[i:i + 5].min()
+        week_mid = close.iloc[i:i + 5].mean()
+        if week_mid > 0:
+            weekly_range_pct = ((week_high - week_low) / week_mid) * 100
+            weekly_ranges.append(weekly_range_pct)
+
+    if not weekly_ranges:
+        return False
+
+    avg_weekly_range = sum(weekly_ranges) / len(weekly_ranges)
+    return avg_weekly_range > max_avg_weekly_range_pct
 
 
 def _store_watchlist_history(watchlist: list[dict], scan_date: str, db_path: Path | None = None):

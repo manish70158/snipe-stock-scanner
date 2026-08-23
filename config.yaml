@@ -144,6 +144,11 @@ pipeline:
   min_watchlist_size: 5
   # Max stocks from same sector in final list
   max_per_sector: 2
+  # "Not extended" threshold: max % above pivot (PDF NARROW: "within 5%")
+  max_above_pivot_pct: 5
+  # Choppiness filter: max avg weekly range (%) over 8 weeks
+  # Clean bases = 1-3%, choppy action = >6%
+  max_avg_weekly_range_pct: 6
 
 data:
   # Yahoo Finance suffix for NSE stocks
