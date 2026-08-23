@@ -92,13 +92,17 @@ def scan(output_json, equity):
     table.add_column("Price", justify="right")
     table.add_column("Pivot", justify="right")
     table.add_column("Stop", justify="right")
-    table.add_column("Score", justify="right", style="green")
+    table.add_column("T1(2R)", justify="right", style="green")
+    table.add_column("T2(3R)", justify="right", style="green")
+    table.add_column("T3(4R)", justify="right", style="dim green")
+    table.add_column("Score", justify="right", style="cyan")
     table.add_column("Edges", justify="right")
     table.add_column("TT", justify="right")
     table.add_column("VCP", justify="right")
     table.add_column("CANSLIM", justify="right")
 
     for item in watchlist:
+        sizing = item.get("position_sizing", {})
         table.add_row(
             str(item.get("rank", "")),
             item["symbol"],
@@ -106,6 +110,9 @@ def scan(output_json, equity):
             f"{item.get('current_price', 0):.0f}",
             f"{item.get('pivot_price', 0):.0f}",
             f"{item.get('stop_price', 0):.0f}",
+            f"{sizing.get('target_1', 0):.0f}",
+            f"{sizing.get('target_2', 0):.0f}",
+            f"{sizing.get('target_3', 0):.0f}",
             f"{item.get('composite_score', 0):.0f}",
             str(item.get("edge_count", 0)),
             f"{item.get('trend_template_score', 0)}/10",
