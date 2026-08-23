@@ -62,61 +62,63 @@ jobs:
           except Exception:
               regime = {}
 
-          # Format message
+          # Format message using HTML parse mode (avoids Markdown escaping issues)
           date = scan.get("scan_date", datetime.now().strftime("%Y-%m-%d"))
           counts = scan.get("stage_counts", {})
           watchlist = scan.get("watchlist", [])
           regime_status = scan.get("regime", "unknown").upper()
 
-          msg = f"📊 *SNIPE Weekly Scan — {date}*\n\n"
-          msg += f"*Market Regime:* `{regime_status}`\n"
-          msg += f"*Pipeline:* {counts.get('universe', 0)} → {counts.get('trend_template', 0)} → {counts.get('pattern_detection', 0)} → {counts.get('fundamental_screen', 0)} → *{counts.get('final_watchlist', 0)}*\n\n"
+          msg = f"📊 <b>SNIPE Weekly Scan — {date}</b>\n\n"
+          msg += f"<b>Market Regime:</b> <code>{regime_status}</code>\n"
+          msg += f"<b>Pipeline:</b> {counts.get('universe', 0)} → {counts.get('trend_template', 0)} → {counts.get('pattern_detection', 0)} → {counts.get('fundamental_screen', 0)} → <b>{counts.get('final_watchlist', 0)}</b>\n\n"
 
           if not watchlist:
               msg += "⚠️ No candidates found this week.\n"
           else:
-              msg += "*🎯 Watchlist:*\n"
-              msg += "```\n"
+              msg += "<b>🎯 Watchlist:</b>\n"
+              msg += "<pre>\n"
               msg += f"{'#':<3}{'Symbol':<12}{'Score':<6}{'Edges':<6}{'Pivot':<8}{'Stop':<8}\n"
-              msg += "—" * 43 + "\n"
+              msg += "-" * 43 + "\n"
               for item in watchlist:
+                  symbol = item['symbol']
                   msg += (
                       f"{item.get('rank', ''):<3}"
-                      f"{item['symbol']:<12}"
+                      f"{symbol:<12}"
                       f"{item.get('composite_score', 0):<6.0f}"
                       f"{item.get('edge_count', 0):<6}"
                       f"{item.get('pivot_price', 0):<8.0f}"
                       f"{item.get('stop_price', 0):<8.0f}\n"
                   )
-              msg += "```\n\n"
+              msg += "</pre>\n\n"
 
               # Detail for top 3
-              msg += "*Top Picks Detail:*\n"
+              msg += "<b>Top Picks Detail:</b>\n"
               for item in watchlist[:3]:
                   edges_str = ", ".join(item.get("edges", []))
                   sizing = item.get("position_sizing", {})
                   shares = sizing.get("shares", "N/A")
                   risk_pct = sizing.get("risk_percent", "N/A")
+                  symbol = item['symbol']
+                  sector = item.get('sector', 'Unknown')
                   msg += (
-                      f"\n*{item.get('rank', '')}. {item['symbol']}* "
-                      f"({item.get('sector', 'Unknown')})\n"
-                      f"  Price: ₹{item.get('current_price', 0):.0f} | "
-                      f"Pivot: ₹{item.get('pivot_price', 0):.0f} | "
-                      f"Stop: ₹{item.get('stop_price', 0):.0f}\n"
+                      f"\n<b>{item.get('rank', '')}. {symbol}</b> ({sector})\n"
+                      f"  Price: Rs.{item.get('current_price', 0):.0f} | "
+                      f"Pivot: Rs.{item.get('pivot_price', 0):.0f} | "
+                      f"Stop: Rs.{item.get('stop_price', 0):.0f}\n"
                       f"  Edges: {edges_str} | "
                       f"TT: {item.get('trend_template_score', 0)}/10 | "
                       f"VCP: {item.get('vcp_quality', 0):.0f}/10\n"
                       f"  Size: {shares} shares @ {risk_pct}% risk\n"
                   )
 
-          msg += f"\n_Scan completed at {datetime.now().strftime('%H:%M UTC')}_"
+          msg += f"\n<i>Scan completed at {datetime.now().strftime('%H:%M UTC')}</i>"
 
-          # Send to Telegram
+          # Send to Telegram using HTML parse mode
           url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
           payload = {
               "chat_id": chat_id,
               "text": msg,
-              "parse_mode": "Markdown",
+              "parse_mode": "HTML",
               "disable_web_page_preview": True,
           }
 
@@ -125,11 +127,14 @@ jobs:
               print("Telegram message sent successfully!")
           else:
               print(f"Failed to send: {resp.status_code} - {resp.text}")
-              # If message too long, send truncated version
-              if resp.status_code == 400 and "too long" in resp.text.lower():
-                  short_msg = msg[:4000] + "\n\n_...truncated_"
-                  payload["text"] = short_msg
-                  requests.post(url, json=payload)
+              # Fallback: send without formatting
+              payload["text"] = msg.replace("<b>", "").replace("</b>", "").replace("<i>", "").replace("</i>", "").replace("<pre>", "").replace("</pre>", "").replace("<code>", "").replace("</code>", "")
+              del payload["parse_mode"]
+              resp2 = requests.post(url, json=payload)
+              if resp2.status_code == 200:
+                  print("Sent without formatting (fallback).")
+              else:
+                  print(f"Fallback also failed: {resp2.status_code} - {resp2.text}")
           EOF
 
       - name: Upload scan results as artifact
