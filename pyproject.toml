@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "snipe"
+version = "0.1.0"
+description = "SNIPE Stock Scanner - Scan, Narrow, Inspect, Position, Execute"
+requires-python = ">=3.11"
+dependencies = [
+    "yfinance>=0.2.30",
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "click>=8.1",
+    "rich>=13.0",
+    "pyyaml>=6.0",
+    "requests>=2.31",
+    "beautifulsoup4>=4.12",
+]
+
+[project.scripts]
+snipe = "snipe.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["src"]

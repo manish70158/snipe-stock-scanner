@@ -1,0 +1,140 @@
+name: Weekly SNIPE Scan
+
+on:
+  schedule:
+    # Run every Saturday at 12:00 UTC (5:30 PM IST) - after market week ends
+    - cron: '0 12 * * 6'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -e .
+
+      - name: Fetch Nifty 500 data
+        run: snipe fetch --symbols 500
+
+      - name: Run SNIPE scan
+        id: scan
+        run: |
+          # Run scan and capture JSON output
+          snipe scan --json > scan_result.json
+
+          # Also run regime check
+          snipe regime --json > regime_result.json
+
+      - name: Format and send Telegram message
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python3 << 'EOF'
+          import json
+          import requests
+          import os
+          from datetime import datetime
+
+          bot_token = os.environ["TELEGRAM_BOT_TOKEN"]
+          chat_id = os.environ["TELEGRAM_CHAT_ID"]
+
+          # Load scan results
+          with open("scan_result.json") as f:
+              scan = json.load(f)
+
+          # Load regime results
+          try:
+              with open("regime_result.json") as f:
+                  regime = json.load(f)
+          except Exception:
+              regime = {}
+
+          # Format message
+          date = scan.get("scan_date", datetime.now().strftime("%Y-%m-%d"))
+          counts = scan.get("stage_counts", {})
+          watchlist = scan.get("watchlist", [])
+          regime_status = scan.get("regime", "unknown").upper()
+
+          msg = f"📊 *SNIPE Weekly Scan — {date}*\n\n"
+          msg += f"*Market Regime:* `{regime_status}`\n"
+          msg += f"*Pipeline:* {counts.get('universe', 0)} → {counts.get('trend_template', 0)} → {counts.get('pattern_detection', 0)} → {counts.get('fundamental_screen', 0)} → *{counts.get('final_watchlist', 0)}*\n\n"
+
+          if not watchlist:
+              msg += "⚠️ No candidates found this week.\n"
+          else:
+              msg += "*🎯 Watchlist:*\n"
+              msg += "```\n"
+              msg += f"{'#':<3}{'Symbol':<12}{'Score':<6}{'Edges':<6}{'Pivot':<8}{'Stop':<8}\n"
+              msg += "—" * 43 + "\n"
+              for item in watchlist:
+                  msg += (
+                      f"{item.get('rank', ''):<3}"
+                      f"{item['symbol']:<12}"
+                      f"{item.get('composite_score', 0):<6.0f}"
+                      f"{item.get('edge_count', 0):<6}"
+                      f"{item.get('pivot_price', 0):<8.0f}"
+                      f"{item.get('stop_price', 0):<8.0f}\n"
+                  )
+              msg += "```\n\n"
+
+              # Detail for top 3
+              msg += "*Top Picks Detail:*\n"
+              for item in watchlist[:3]:
+                  edges_str = ", ".join(item.get("edges", []))
+                  sizing = item.get("position_sizing", {})
+                  shares = sizing.get("shares", "N/A")
+                  risk_pct = sizing.get("risk_percent", "N/A")
+                  msg += (
+                      f"\n*{item.get('rank', '')}. {item['symbol']}* "
+                      f"({item.get('sector', 'Unknown')})\n"
+                      f"  Price: ₹{item.get('current_price', 0):.0f} | "
+                      f"Pivot: ₹{item.get('pivot_price', 0):.0f} | "
+                      f"Stop: ₹{item.get('stop_price', 0):.0f}\n"
+                      f"  Edges: {edges_str} | "
+                      f"TT: {item.get('trend_template_score', 0)}/10 | "
+                      f"VCP: {item.get('vcp_quality', 0):.0f}/10\n"
+                      f"  Size: {shares} shares @ {risk_pct}% risk\n"
+                  )
+
+          msg += f"\n_Scan completed at {datetime.now().strftime('%H:%M UTC')}_"
+
+          # Send to Telegram
+          url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+          payload = {
+              "chat_id": chat_id,
+              "text": msg,
+              "parse_mode": "Markdown",
+              "disable_web_page_preview": True,
+          }
+
+          resp = requests.post(url, json=payload)
+          if resp.status_code == 200:
+              print("Telegram message sent successfully!")
+          else:
+              print(f"Failed to send: {resp.status_code} - {resp.text}")
+              # If message too long, send truncated version
+              if resp.status_code == 400 and "too long" in resp.text.lower():
+                  short_msg = msg[:4000] + "\n\n_...truncated_"
+                  payload["text"] = short_msg
+                  requests.post(url, json=payload)
+          EOF
+
+      - name: Upload scan results as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: scan-results-${{ github.run_number }}
+          path: |
+            scan_result.json
+            regime_result.json
+          retention-days: 90

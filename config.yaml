@@ -1,0 +1,147 @@
+# SNIPE Stock Scanner Configuration
+# All configurable thresholds from the SNIPE framework
+
+universe:
+  index: "NIFTY500"
+  # Refresh constituent list quarterly
+  refresh_interval_days: 90
+
+trend_template:
+  # Criterion 8: Price must be at least this % above 52-week low
+  min_above_52w_low_pct: 30
+  # Criterion 9: Price must be within this % of 52-week high
+  max_below_52w_high_pct: 25
+  # Criterion 10: RS rank must be in top N% of universe
+  rs_top_percentile: 30
+  # Criterion 4: 200-DMA must be rising for at least N trading days
+  ma200_rising_min_days: 22
+
+vcp:
+  # Minimum number of contractions to qualify as VCP
+  min_contractions: 2
+  # Maximum first contraction depth (%)
+  max_t1_depth_pct: 35
+  # Minimum first contraction depth (%) - below this is "flat base"
+  min_t1_depth_pct: 10
+  # Minimum base duration (weeks)
+  min_base_weeks: 3
+  # Maximum base duration (weeks)
+  max_base_weeks: 65
+  # Optimal base range for quality scoring
+  optimal_base_min_weeks: 5
+  optimal_base_max_weeks: 25
+  # High quality threshold (score out of 10)
+  high_quality_threshold: 8
+  # Low quality threshold
+  low_quality_threshold: 4
+  # Final contraction tightness for high quality (%)
+  tight_final_contraction_pct: 8
+  # Approaching pivot threshold (%)
+  approaching_pivot_pct: 3
+
+stage_analysis:
+  # Weeks above rising 150-DMA to confirm Stage 2
+  stage2_confirm_weeks: 4
+  # Late Stage 2 warning threshold (weeks)
+  late_stage2_weeks: 40
+
+breakout:
+  # Minimum volume ratio for confirmed breakout (vs 50-day avg)
+  min_volume_ratio: 1.5
+  # Minimum price close above pivot (%)
+  min_above_pivot_pct: 1
+  # HV1 lookback period (trading days = 1 year)
+  hv1_lookback_days: 252
+  # Approaching breakout threshold (%)
+  approaching_pct: 3
+
+canslim:
+  # C: Minimum QoQ EPS growth (%)
+  min_eps_growth_qoq_pct: 20
+  # C: Minimum revenue growth (%) - supporting
+  min_revenue_growth_qoq_pct: 20
+  # A: Minimum 3-year EPS CAGR (%)
+  min_eps_cagr_3yr_pct: 25
+  # A: Minimum ROE (%)
+  min_roe_pct: 17
+  # N: Days within which 52W high counts as "new"
+  new_high_lookback_days: 5
+  # S: Accumulation/distribution lookback (days)
+  accum_dist_lookback_days: 50
+  # L: RS percentile threshold for leader (top N%)
+  leader_rs_percentile: 80
+  # I: Quarters to check for institutional holding change
+  institutional_quarters: 2
+  # Composite: Minimum score to be "fundamentally qualified"
+  min_qualified_score: 5
+
+edge_scoring:
+  # RS edge: must be in top N% for RS edge
+  rs_edge_percentile: 90
+  # Weights for composite score (must sum to 100)
+  weight_edge_count: 40
+  weight_vcp_quality: 20
+  weight_trend_template: 15
+  weight_canslim: 15
+  weight_volume_ratio: 10
+  # Volume ratio cap for scoring
+  volume_ratio_cap: 3.0
+
+market_regime:
+  # GREEN thresholds
+  green_breadth_50dma_min: 60
+  # RED thresholds
+  red_breadth_50dma_max: 40
+  # Position sizing multipliers
+  green_sizing_multiplier: 1.0
+  yellow_sizing_multiplier: 0.5
+  red_sizing_multiplier: 0.0
+
+position_sizing:
+  # Risk per trade based on edge count (% of equity)
+  risk_1_edge_pct: 0.5
+  risk_2_edge_pct: 1.0
+  risk_3_edge_pct: 1.5
+  risk_4plus_edge_pct: 2.0
+  # Maximum stop loss distance (%)
+  max_stop_distance_pct: 8
+  # Portfolio limits
+  max_position_pct_of_equity: 20
+  max_total_risk_pct: 5
+  max_open_positions: 10
+
+sell_rules:
+  # Offensive: First target profit (%)
+  first_target_pct: 20
+  # Offensive: Trailing stop activates at gain (%)
+  trailing_stop_activation_pct: 20
+  # Trailing stop: EMA period
+  trailing_stop_ema_period: 21
+  # Climactic top: volume multiplier threshold
+  climactic_volume_multiplier: 3.0
+  # Three weeks tight: maximum weekly range (%)
+  three_weeks_tight_range_pct: 3
+  # Three strikes: days window
+  three_strikes_window_days: 10
+  # Three strikes: MA period for close-below check
+  three_strikes_ma_period: 10
+  # Volume reversal: close must be in bottom N% of day range
+  volume_reversal_close_pct: 25
+
+pipeline:
+  # Maximum stocks in final watchlist
+  max_watchlist_size: 7
+  # Minimum watchlist size (below this = low conviction environment)
+  min_watchlist_size: 5
+  # Max stocks from same sector in final list
+  max_per_sector: 2
+
+data:
+  # Yahoo Finance suffix for NSE stocks
+  yfinance_suffix: ".NS"
+  # Nifty 500 index symbol
+  nifty500_symbol: "^CRSLDX"
+  # Minimum trading days for valid analysis
+  min_history_days: 200
+  # Data staleness threshold (days)
+  stale_data_days: 2
