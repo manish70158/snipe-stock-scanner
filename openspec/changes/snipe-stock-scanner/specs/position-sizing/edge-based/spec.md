@@ -1,115 +1,130 @@
 ## Purpose
 
-Calculates position size and risk allocation for each trade based on the number of edges identified, account equity, market regime, and maximum portfolio risk constraints.
+Calculates position size and risk allocation for each trade based on edge count, stop distance, account equity, and market regime. Enforces the MD framework's strict rules: minimum 2 edges to trade, maximum 1.5% risk, maximum 12% position, maximum 5 positions.
 
 ## ADDED Requirements
 
-### Requirement: Score 0 = No Trade (PDF Page 14)
+### Requirement: Minimum 2 Edges to Trade
 
-The system SHALL reject any position where edge_count=0. Per the framework: "No edges = NO trade." When edge_count is 0, the system SHALL return valid=false with reason="no_edges" and shares=0.
+The system SHALL reject any position where edge_count < 2. Per the MD framework:
+- "Trade only setups with 2+ edges. 3-4 edges = maximum confidence = larger size."
+- 0 edges = "No trade — Skip"
+- 1 edge = "Watchlist only — wait for more edges"
 
-#### Scenario: Zero edges blocks trade
-- **WHEN** a stock qualifies for the watchlist but has 0 edges
-- **THEN** the system SHALL NOT generate a position size, returning reason="no_edges"
+#### Scenario: Insufficient edges (0-1)
+- **WHEN** a stock has 0 or 1 edge
+- **THEN** the system SHALL return valid=false with reason="insufficient_edges" and shares=0
 
-### Requirement: Edge-Based Risk Allocation
+### Requirement: Edge-Based Risk Allocation (MD Position Size Table)
 
-The system SHALL determine the percentage of account equity to risk per trade based on edge count:
-- 0 edges: 0% — NO TRADE (see above)
-- 1 edge: 0.5% of account equity at risk
-- 2 edges: 1.0% of account equity at risk
-- 3 edges: 1.5% of account equity at risk
-- 4+ edges: 2.0% of account equity at risk (maximum)
+The system SHALL determine risk and position caps per the MD framework table:
 
-Risk at stake = (Entry Price - Stop Loss Price) × Number of Shares
+| Edge Count | Risk per Trade | Max Position Size | Action |
+|-----------|----------------|-------------------|--------|
+| 0-1 | 0% | 0% | NO TRADE |
+| 2 | 0.5% of capital | 5% of portfolio | Trade with reduced size |
+| 3 | 1.0% of capital | 8% of portfolio | Trade with standard size |
+| 4 | 1.5% of capital | 12% of portfolio | Trade with maximum size (rare) |
+
+Risk Amount = Account Size × Risk%
+Share Quantity = Risk Amount ÷ (Entry Price - Stop Price)
+Position Value = Share Quantity × Entry Price
 
 #### Scenario: 2-edge position sizing
-- **WHEN** a stock has 2 edges, account equity is 10,00,000, entry at 500, stop at 470 (6% risk per share)
-- **THEN** the system SHALL calculate: risk_amount = 10,00,000 × 1% = 10,000; shares = 10,000 / (500-470) = 333 shares; position_value = 333 × 500 = 1,66,500
+- **WHEN** a stock has 2 edges, account equity ₹10,00,000, entry at ₹412, stop at ₹378
+- **THEN** risk_amount = ₹10,00,000 × 0.5% = ₹5,000; shares = ₹5,000 ÷ ₹34 = 147; position_value = ₹60,564 (6%)
+- **NOTE** position_value 6% > 5% cap → cap at 5% = ₹50,000 → shares = 121
+
+#### Scenario: 3-edge position sizing
+- **WHEN** a stock has 3 edges, account equity ₹10,00,000, entry at ₹412, stop at ₹378
+- **THEN** risk_amount = ₹10,00,000 × 1% = ₹10,000; shares = ₹10,000 ÷ ₹34 = 294; position_value = ₹1,21,128 (12.1%)
+- **NOTE** position_value 12.1% > 8% cap → cap at 8% = ₹80,000 → shares = 194
 
 #### Scenario: 4-edge maximum allocation
-- **WHEN** a stock has 5 edges, account equity is 10,00,000, entry at 200, stop at 185 (7.5% per share)
-- **THEN** the system SHALL cap risk at 2% (4+ edges rule): risk_amount = 20,000; shares = 20,000 / 15 = 1,333 shares; position_value = 2,66,600
+- **WHEN** a stock has 4 edges, account equity ₹10,00,000, entry at ₹200, stop at ₹185
+- **THEN** risk_amount = ₹15,000; shares = ₹15,000 ÷ ₹15 = 1,000; position_value = ₹2,00,000 (20%)
+- **NOTE** position_value 20% > 12% cap → cap at 12% = ₹1,20,000 → shares = 600
 
-#### Scenario: Tight stop increases position size
-- **WHEN** a stock has 3 edges, account equity 10,00,000, entry at 1000, stop at 970 (3% risk per share)
-- **THEN** the system SHALL calculate: risk_amount = 15,000; shares = 15,000 / 30 = 500 shares; position_value = 5,00,000
+### Requirement: Stop Loss Rules (MD Framework)
 
-### Requirement: Stop Loss Distance Validation
+The system SHALL enforce stop placement per the MD:
+- **VCP stop**: Below the low of C3 (the last/tightest contraction) — NOT below base_low (T1)
+- **Maximum stop distance**: 8% from entry
+- "If stop requires >8%, the entry is too late — skip the trade"
+- "Stop MUST be below a logical price level (not arbitrary %)"
+- "NEVER widen a stop after entry"
 
-The system SHALL enforce a maximum stop loss distance of 8% from entry. If the natural stop (below base low) exceeds 8%, the system SHALL flag the trade as "stop_too_wide" and NOT generate a position size.
-
-#### Scenario: Acceptable stop distance
-- **WHEN** entry is at 500 and base low (stop) is at 468 (6.4% below entry)
-- **THEN** the system SHALL accept the stop and compute position size normally
+#### Scenario: Acceptable stop (C3 low)
+- **WHEN** VCP has pivot at ₹412 and C3 low at ₹378 (8.2% below)
+- **THEN** the system SHALL accept (within 8% tolerance) and compute position size
 
 #### Scenario: Stop too wide
-- **WHEN** entry is at 500 and the base low is at 440 (12% below entry)
-- **THEN** the system SHALL reject the trade with reason="stop_too_wide" (exceeds 8% maximum) and suggest waiting for a tighter setup
+- **WHEN** entry at ₹500 and C3 low at ₹430 (14% below)
+- **THEN** the system SHALL reject with reason="stop_too_wide" — entry is too late
+
+### Requirement: Target Setting (Minimum R:R 2:1)
+
+Per the MD framework:
+- "Minimum R:R = 2:1"
+- "Target 1 must be ≥ 2× your stop distance"
+- Two-Tranche Exit: Sell 50% at Target 1 (+20-25%), trail remaining with 10-DMA
+
+The system SHALL compute targets as:
+- target_1 = entry + 2 × risk_per_share (R:R 2:1) — first profit exit
+- target_2 = entry + 3 × risk_per_share (R:R 3:1) — trailing stop zone
+- target_3 = entry + 4 × risk_per_share (R:R 4:1) — exceptional move
+
+#### Scenario: Target calculation
+- **WHEN** entry=₹412, stop=₹378, risk_per_share=₹34
+- **THEN** target_1=₹480 (2R), target_2=₹514 (3R), target_3=₹548 (4R)
 
 ### Requirement: Market Regime Adjustment
 
-The system SHALL adjust position sizing based on the current market regime:
-- GREEN regime: Use full edge-based allocation (100%)
-- YELLOW regime: Reduce allocation by 50% (e.g., 2-edge goes from 1% to 0.5%)
-- RED regime: No new positions (position size = 0)
+The system SHALL adjust position sizing based on market regime:
+- **Stage 2 confirmed (GREEN)**: Use full edge-based allocation (100%)
+- **Stage 2 late / Stage 3 signs (YELLOW)**: Reduce allocation by 50%
+- **Stage 3/4 (RED)**: No new positions (position size = 0)
+
+MD Portfolio Exposure Rules:
+| Market Stage | Max Portfolio Exposure | Max New Positions/Week |
+|---|---|---|
+| Stage 2 confirmed | 80-100% | 3-5 |
+| Stage 2 late | 50-70% | 1-2 |
+| Stage 3 | 20-40% | 0-1 |
+| Stage 4 | 0-10% | 0 |
 
 #### Scenario: Yellow regime reduction
 - **WHEN** a 3-edge stock is identified but market regime is "yellow"
-- **THEN** the system SHALL reduce risk from 1.5% to 0.75% of equity and compute shares accordingly
+- **THEN** the system SHALL reduce risk from 1.0% to 0.5% of equity
 
 #### Scenario: Red regime blocks entry
-- **WHEN** a 4-edge stock is identified but market regime is "red"
-- **THEN** the system SHALL output position_size=0 with reason="market_regime_red"
+- **WHEN** any setup identified but market is in Stage 3/4 (red)
+- **THEN** the system SHALL output valid=false with reason="market_regime_red"
 
-### Requirement: Edge-Count Position Size Caps
-
-The system SHALL enforce maximum position size as a percentage of equity based on edge count:
-- 1 edge: Maximum 10% of equity in the position
-- 2 edges: Maximum 13% of equity in the position
-- 3 edges: Maximum 15% of equity in the position
-- 4+ edges: Maximum 20% of equity in the position
-
-These caps prevent over-concentration in low-conviction setups even when stops are tight.
-
-#### Scenario: Position capped by edge count
-- **WHEN** a stock has 1 edge, tight stop (3%), account equity 10,00,000, risk-based calculation yields 16% of equity
-- **THEN** the system SHALL cap the position at 10% of equity (1,00,000) regardless of the risk calculation
-
-#### Scenario: High-conviction full allocation
-- **WHEN** a stock has 4 edges, tight stop, and risk-based calculation yields 18% of equity
-- **THEN** the system SHALL allow the full 18% (within the 20% cap for 4+ edges)
-
-### Requirement: Portfolio Concentration Limits
+### Requirement: Portfolio Risk Limits (MD "5 Non-Negotiable Rules")
 
 The system SHALL enforce:
-- Maximum 20% of equity in a single position (absolute cap)
-- Maximum 5% of equity at risk across all open positions combined
-- Maximum 8-10 open positions at any time
+- "Never risk > 1% of account on a single trade" (max 1.5% at 4 edges is the exception)
+- "Never hold > 5 positions simultaneously"
+- Maximum 2 stocks from the same sector (correlation rule)
+- "Cut total exposure to 50% if 3 stops hit in a row" (3-Strike Rule)
 
-#### Scenario: Position too large
-- **WHEN** calculated position value exceeds 20% of account equity
-- **THEN** the system SHALL cap position_value at 20% of equity and recalculate shares downward
-
-#### Scenario: Portfolio risk limit reached
-- **WHEN** total risk across existing open positions is already 4.5% of equity and a new 2-edge trade wants 1% risk
-- **THEN** the system SHALL warn portfolio_risk_limit_approaching=true (4.5% + 1% = 5.5% would exceed 5% cap) and suggest reducing to 0.5% risk on the new trade
+#### Scenario: Max positions reached
+- **WHEN** trader already has 5 open positions
+- **THEN** the system SHALL warn max_positions_reached=true and block new entries
 
 ### Requirement: Position Sizing Output
 
 The system SHALL output for each trade recommendation:
-- edge_count and edges list
+- edge_count, edges list, tradeable flag
 - risk_percent (of equity)
-- risk_amount (absolute)
+- risk_amount (absolute ₹)
 - entry_price, stop_price, stop_distance_pct
 - shares (quantity to buy)
 - position_value (total capital deployed)
 - position_pct_of_equity
 - regime_adjustment applied
-- target_1 (entry + 1× risk, R:R 1:1)
-- target_2 (entry + 2× risk, R:R 2:1)
-- target_3 (entry + 3× risk, R:R 3:1)
-
-#### Scenario: Complete position output
-- **WHEN** all inputs are available for a 3-edge trade in green regime
-- **THEN** the system SHALL output all fields listed above with computed values
+- target_1 (entry + 2R, minimum acceptable target)
+- target_2 (entry + 3R)
+- target_3 (entry + 4R)
+- risk_reward_ratio (minimum 2.0)

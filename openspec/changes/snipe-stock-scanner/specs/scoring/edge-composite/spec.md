@@ -1,63 +1,84 @@
 ## Purpose
 
-Computes a multi-factor edge score for each stock candidate by combining technical pattern quality, volume signals, relative strength, and fundamental catalysts into a single actionable composite score that determines position sizing and trade priority.
+Scores every setup using the 4-edge system from the MD framework. Edge count determines whether to trade and how much to risk. Only setups with 2+ edges are tradeable.
 
 ## ADDED Requirements
 
-### Requirement: Edge Factor Identification
+### Requirement: The 4 Edges (MD Framework)
 
-The system SHALL evaluate each stock for the following edge factors, assigning 1 point per edge present:
+The system SHALL evaluate each stock for exactly 4 edge factors, assigning 1 point per edge present:
 
-1. **HV1 Edge**: Breakout on highest volume in 1 year (252 days)
-2. **HVE Edge**: Breakout on highest volume ever in available history
-3. **RS Edge**: Stock dual-timeframe RS (min of 3-month and 6-month) in top 10% of Nifty 500 AND making a new RS high simultaneously with price high
-4. **N-Factor Edge**: Stock price at or within 5% of its 52-week high (new price high confirms momentum alignment)
-5. **VCP Edge**: High-quality VCP pattern (quality score ≥8/10) with tight final contraction ≤8%
-6. **Trend Template Edge**: Perfect 10/10 Trend Template score
+1. **HV1 — Highest Volume Day 1 (Institutional Entry Signal)**
+   - Stock prints its highest volume in 50+ days on a single day
+   - Price closes in the upper 60% of the day's range (close > low + 0.6 × (high - low))
+   - HV1 is valid for 10 trading days. If no base forms within 10 days, ignore.
 
-**Alignment Bonus**: When all 4 core edges (HV1 + HVE + RS + N-Factor) align simultaneously, the system SHALL add +1 bonus point.
+2. **HVE — High Volume Earnings (Post-Result Momentum)**
+   - Stock gaps up or surges ≥5% on a single day with volume ≥ 2× the 50-day average
+   - This signals institutional repricing after new fundamental information
+   - Creates a new "floor" — stock rarely returns below the gap zone
 
-Maximum edge count: 7 (4 core + bonus + VCP + Trend Template; 5+ is exceptional and rare).
+3. **RS Edge — Relative Strength (Outperforming During Correction)**
+   - While Nifty 500 corrects ≥5%, the stock corrects less than 50% of Nifty's decline (or stays flat/rises)
+   - RS Ratio = Stock % Change (21-day) / Nifty 500 % Change (21-day) > 2.0 during Nifty decline
+   - Automated proxy: stock RS percentile ≥ 80th percentile
 
-#### Scenario: Multi-edge breakout
-- **WHEN** a stock breaks out with HV1 (highest volume in 1 year), RS in top 5%, price at 52-week high, and a high-quality VCP pattern, with perfect Trend Template
-- **THEN** the system SHALL report edge_count=5, edges=["hv1","rs","n_factor","vcp","trend_template"], composite_score calculated accordingly
+4. **N-Factor — News Catalyst (Sector/Policy Tailwind)**
+   - A macro or sector-level catalyst creating sustained demand (PLI scheme, budget allocation, global theme)
+   - N-Factor ALONE is never enough — it must combine with HV1, HVE, or RS Edge
+   - This is qualitative and requires manual assessment (automated scan sets to False)
 
-#### Scenario: Alignment bonus triggered
-- **WHEN** a stock breaks out with HV1, HVE (all-time highest volume), RS in top 5%, AND price at 52-week high
-- **THEN** the system SHALL report all 4 core edges plus alignment_bonus, giving edge_count=5 from volume/momentum alone
+**Maximum edge count: 4. Minimum to trade: 2.**
 
-#### Scenario: Single-edge breakout
-- **WHEN** a stock breaks out with adequate volume (not HV1), average RS rank (top 25%), and a medium-quality VCP
-- **THEN** the system SHALL report edge_count=0 (no edges met their thresholds)
+**Rule:** "Trade only setups with 2+ edges. 3-4 edges = maximum confidence = larger size."
 
-#### Scenario: HVE implies HV1
-- **WHEN** a stock triggers HVE edge (highest volume ever)
-- **THEN** the system SHALL count both hve_edge=true AND hv1_edge=true (HVE is a superset), giving 2 edge points from volume alone
+#### Scenario: 3-edge high-conviction setup
+- **WHEN** a stock breaks out with HV1 (highest volume in 50 days, close in upper 60%), RS Edge (outperformed during last correction), and N-Factor (PLI sector tailwind)
+- **THEN** the system SHALL report edge_count=3, edges=["hv1","rs","n_factor"], tradeable=true
+
+#### Scenario: 1-edge watchlist-only
+- **WHEN** a stock has only RS Edge (outperformed during correction) but no HV1, HVE, or N-Factor
+- **THEN** the system SHALL report edge_count=1, tradeable=false (watchlist only, do not trade)
+
+#### Scenario: HVE post-earnings signal
+- **WHEN** a stock gaps up 7% on result day with volume 2.5× the 50-day average
+- **THEN** the system SHALL flag hve_edge=true. Note: HVE does NOT imply HV1 — they are independent edges
+
+#### Scenario: No edges present
+- **WHEN** a stock passes technical filters but has no volume signal, no RS edge, and no catalyst
+- **THEN** the system SHALL report edge_count=0, tradeable=false, reason="no_edges"
+
+### Requirement: Edge-Based Position Sizing (Linked to Edge Count)
+
+Per the MD framework's position size table:
+
+| Edge Count | Risk per Trade | Max Position Size | Action |
+|-----------|----------------|-------------------|--------|
+| 0 | 0% | 0% | No trade — skip |
+| 1 | 0% | 0% | Watchlist only — wait for more edges |
+| 2 | 0.5% of capital | 5% of portfolio | Trade with 50% of max size |
+| 3 | 1.0% of capital | 8% of portfolio | Trade with 75% of max size |
+| 4 | 1.5% of capital | 12% of portfolio | Trade with 100% of max size (rare) |
 
 ### Requirement: Composite Edge Score Calculation
 
-The system SHALL compute a composite edge score (0-100) using weighted factors:
-- Edge count (0-6): 40% weight
+The system SHALL compute a composite edge score (0-100) using weighted factors for ranking purposes:
+- Edge count (0-4): 40% weight
 - VCP quality score (0-10): 20% weight
 - Trend Template score (0-10): 15% weight
 - CANSLIM score (0-7): 15% weight
 - Volume ratio on breakout: 10% weight
 
-Formula: composite_score = (edge_count/6 × 40) + (vcp_quality/10 × 20) + (trend_template/10 × 15) + (canslim/7 × 15) + (min(volume_ratio, 3)/3 × 10)
+Note: VCP quality and Trend Template contribute to the composite RANKING score but are NOT counted as separate "edges" in the 4-edge system.
 
 #### Scenario: High composite score
-- **WHEN** a stock has edge_count=4, vcp_quality=9, trend_template=10, canslim=6, volume_ratio=2.5
-- **THEN** the system SHALL compute composite_score = (4/6×40) + (9/10×20) + (10/10×15) + (6/7×15) + (2.5/3×10) = 26.67 + 18 + 15 + 12.86 + 8.33 = 80.86, rounded to 81
+- **WHEN** a stock has edge_count=3, vcp_quality=9, trend_template=10, canslim=6, volume_ratio=2.5
+- **THEN** the system SHALL compute a high composite score for ranking priority
 
 #### Scenario: Low composite score
-- **WHEN** a stock has edge_count=1, vcp_quality=4, trend_template=7, canslim=3, volume_ratio=1.2
-- **THEN** the system SHALL compute a score in the 30-40 range, indicating a marginal candidate
+- **WHEN** a stock has edge_count=2, vcp_quality=4, trend_template=7, canslim=3, volume_ratio=1.2
+- **THEN** the system SHALL compute a lower score — still tradeable (2+ edges) but lower priority
 
 ### Requirement: Edge-Based Ranking
 
 The system SHALL rank all qualifying stocks by composite_score in descending order. When two stocks have equal composite scores, the tiebreaker SHALL be edge_count (higher first), then volume_ratio (higher first).
-
-#### Scenario: Ranking output
-- **WHEN** the system has 12 stocks that passed the scanning phase
-- **THEN** the system SHALL output a ranked list sorted by composite_score descending, with rank position 1 being the highest-scored candidate
