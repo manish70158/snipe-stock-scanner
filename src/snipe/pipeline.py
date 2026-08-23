@@ -245,12 +245,15 @@ def run_pipeline(
         conn.close()
 
         # Score individual CANSLIM criteria
+        # Note: Fundamentals data must be fetched separately (not yet automated)
         c_result = score_c_criterion(
-            dict(fund_row)["eps_growth_qoq"] if fund_row else None,
+            dict(fund_row).get("eps_growth_qoq") if fund_row else None,
             config=config
         )
         a_result = score_a_criterion(
-            None, dict(fund_row).get("roe") if fund_row else None, config=config
+            dict(fund_row).get("eps_cagr_3yr") if fund_row else None,
+            dict(fund_row).get("roe") if fund_row else None,
+            config=config
         )
         n_result = score_n_criterion(current_price, high_52w, config=config)
         s_result = score_s_criterion(df, config=config)

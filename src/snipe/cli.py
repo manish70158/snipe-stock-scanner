@@ -117,25 +117,41 @@ def scan(output_json, equity):
     # Show CANSLIM breakdown for each stock
     if watchlist:
         console.print("\n[bold cyan]CANSLIM Breakdown:[/bold cyan]")
+
+        # Check if fundamentals data is missing
+        missing_fundamentals = any(
+            item.get("canslim_detail", {}).get("C") == "data_unavailable"
+            and item.get("canslim_detail", {}).get("A") == "data_unavailable"
+            for item in watchlist
+        )
+        if missing_fundamentals:
+            console.print("[yellow]⚠️  Note: C, A, I criteria unavailable (fundamentals not fetched)[/yellow]\n")
+
         for item in watchlist:
             canslim = item.get("canslim_detail", {})
 
-            def format_criterion(key, value):
+            def format_criterion(value):
                 """Format criterion with checkmark/cross/dash."""
-                if value is True:
-                    return f"[green]✓[/green]"
-                elif value == "data_unavailable":
+                # Handle data unavailable first
+                if value == "data_unavailable" or value is None:
                     return f"[dim]–[/dim]"
-                else:
+                # Handle boolean True (works for both bool and numpy.bool_)
+                elif value == True:  # noqa: E712 (intentional == for numpy.bool_)
+                    return f"[green]✓[/green]"
+                # Handle boolean False
+                elif value == False:  # noqa: E712 (intentional == for numpy.bool_)
                     return f"[red]✗[/red]"
+                else:
+                    # Fallback for unexpected values
+                    return f"[dim]?[/dim]"
 
-            c = format_criterion("C", canslim.get("C"))
-            a = format_criterion("A", canslim.get("A"))
-            n = format_criterion("N", canslim.get("N"))
-            s = format_criterion("S", canslim.get("S"))
-            l = format_criterion("L", canslim.get("L"))
-            i = format_criterion("I", canslim.get("I"))
-            m = format_criterion("M", canslim.get("M"))
+            c = format_criterion(canslim.get("C"))
+            a = format_criterion(canslim.get("A"))
+            n = format_criterion(canslim.get("N"))
+            s = format_criterion(canslim.get("S"))
+            l = format_criterion(canslim.get("L"))
+            i = format_criterion(canslim.get("I"))
+            m = format_criterion(canslim.get("M"))
 
             score = item.get("canslim_score", 0)
             symbol = item["symbol"]

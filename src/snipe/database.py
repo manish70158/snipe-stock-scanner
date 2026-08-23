@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS fundamentals (
     roe REAL,
     net_profit REAL,
     eps_growth_qoq REAL,
+    eps_cagr_3yr REAL,
     revenue_growth_qoq REAL,
     fii_holding_pct REAL,
     dii_holding_pct REAL,
