@@ -10,19 +10,30 @@ The system SHALL evaluate quarterly EPS growth by comparing the most recent quar
 
 The system SHALL also check:
 - Revenue growth ≥20% QoQ (supporting criterion)
-- EPS acceleration (current quarter growth > previous quarter growth) as a bonus signal
+- **EPS Acceleration**: 3 consecutive quarters of EPS growth where each quarter's growth exceeds the previous (e.g., 15% → 22% → 38% = "institutional magnet")
+- **A+ Signal**: EPS growth ≥30% = highest quality signal
+- **Consecutive Growth**: At least 2 consecutive quarters of ≥20% QoQ growth (Trend Template Criterion 9)
 
-#### Scenario: Strong current earnings
-- **WHEN** a stock's latest quarter EPS grew 35% vs the same quarter last year, with revenue up 28%
-- **THEN** the system SHALL score c_criterion=true with eps_growth_qoq=35, revenue_growth_qoq=28
+The system SHALL accept an `eps_growth_history` parameter (last 3 quarters of YoY EPS growth, oldest to newest) and detect:
+- `eps_accelerating`: True if all 3 quarters show positive growth AND each > previous
+- `eps_consecutive_growth`: True if all 3 quarters show any positive growth
+- `eps_a_plus_signal`: True if current quarter ≥ 30%
 
-#### Scenario: Earnings deceleration warning
-- **WHEN** a stock's EPS grew 25% this quarter but grew 40% in the prior quarter
-- **THEN** the system SHALL score c_criterion=true (≥20%) but flag eps_decelerating=true as a caution
+#### Scenario: Strong current earnings with acceleration
+- **WHEN** a stock's last 3 quarters show EPS growth of [15%, 22%, 38%]
+- **THEN** the system SHALL score c_criterion=true, eps_accelerating=true, eps_a_plus_signal=true
+
+#### Scenario: Good growth but decelerating
+- **WHEN** a stock's last 3 quarters show EPS growth of [40%, 32%, 25%]
+- **THEN** the system SHALL score c_criterion=true (≥20%) but eps_accelerating=false (each quarter lower than previous)
 
 #### Scenario: Insufficient earnings data
 - **WHEN** quarterly earnings data is not available for the required comparison periods
 - **THEN** the system SHALL mark c_criterion="data_unavailable" and not fail the stock on this criterion alone
+
+#### Scenario: Two consecutive quarters check (Trend Template C9)
+- **WHEN** a stock has 2+ consecutive quarters of ≥20% EPS growth
+- **THEN** the system SHALL qualify for Trend Template Criterion 9 (when data is available)
 
 ### Requirement: A — Annual Earnings Growth
 

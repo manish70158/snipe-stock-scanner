@@ -1,91 +1,121 @@
 ## Purpose
 
-Reduces the initial scan universe (up to 500 stocks) through progressive filtering stages to produce a final actionable watchlist of 5-7 highest-conviction candidates ranked by composite edge score.
+Implements the complete S.N.I.P.E. process map — reducing the Nifty 500 universe through 5 sequential stages to produce a final actionable watchlist of 5-7 highest-conviction candidates.
 
 ## ADDED Requirements
 
-### Requirement: Pipeline Stage Definition
+### Requirement: S.N.I.P.E. Pipeline Stage Definition
 
-The system SHALL process stocks through the following sequential stages:
+The system SHALL process stocks through the following stages matching the PDF Complete Process Map:
 
-1. **Universe Filter**: Start with Nifty 500 constituents (or user-defined universe)
-2. **Technical Pre-Screen**: Apply Trend Template (must pass all 10 points) → typically reduces to 50-80 stocks
-3. **Pattern Detection**: Identify VCP/base patterns and proximity to pivot → typically reduces to 15-25 stocks
-4. **Fundamental Screen**: Apply CANSLIM criteria (score ≥ 3) → typically reduces to 15-20 stocks
-5. **Sector NARROW Filter**: Remove stocks NOT in leading sectors (top 30% by median 6-month return). Leading sectors are computed from the aggregate performance of all 500 stocks.
-6. **Edge Scoring**: Compute composite edge score and rank
-7. **Final Narrowing**: Select top 5-7 by composite score, ensuring sector diversification (max 2 per sector)
+**S — SCAN: Cast a wide but structured net**
+1. Universe: Nifty 500 constituents
+2. Filter: Price > ₹50, Market Cap > ₹2,000 Cr, Avg Volume > 5L shares OR Turnover > ₹10 Cr
+3. Dual-timeframe RS: Compute RS percentiles for BOTH 3-month AND 6-month (use min of both)
+4. Sector rankings: Compute sector momentum (median 6-month return), identify leading sectors (top 25%)
+5. Trend Template: Apply 10-point SEPA criteria (ALL must pass)
+
+**N — NARROW: Shortlist top 5-7 only**
+1. Leading sector filter: Remove stocks NOT in a leading sector (top 25% by sector RS)
+2. Clean chart patterns: VCP/base detection + confirmed Stage 2
+3. Not extended: If stock is >10% above its pivot, it's not tradeable (FOMO rule)
+4. Fundamental qualification: CANSLIM score ≥ 3
+
+**I — IDENTIFY EDGES: Score the setup quality**
+1. 4 core edges: HV1 (52W high volume), HVE (all-time high volume), RS (top 10% + new high), N-Factor (52W new high on price)
+2. Alignment bonus: +1 when all 4 core edges align simultaneously
+3. VCP Edge: High-quality VCP (score ≥ 8/10)
+4. Trend Template Edge: Perfect 10/10 score
+5. Composite score: Weighted combination of edges + VCP + TT + CANSLIM + volume
+
+**P — PLAN THE TRADE: Entry, SL, Target, Position size**
+1. Rank by composite score
+2. Sector diversification: max 2 per sector
+3. Final watchlist: top 5-7 stocks
+4. Position sizing: Based on edge count (0 edges = no trade, 1 = 10% max, 2 = 13%, 3 = 15%, 4+ = 20%)
+
+**E — EXECUTE: Output for limit orders + journaling**
+1. Store watchlist history for tracking
+2. Output formatted for trade execution (entry, stop, targets, shares)
 
 #### Scenario: Full pipeline execution
 - **WHEN** the scanner runs on 500 stocks
-- **THEN** the system SHALL output the count at each stage (e.g., 500 → 65 → 18 → 15 → 10 sector-narrowed → ranked → top 7) and the final watchlist of 5-7 stocks
+- **THEN** the system SHALL output stage counts following S.N.I.P.E.: universe=500 → scan_trend_template=55 → narrow_sector=24 → narrow_patterns=8 → narrow_qualified=8 → identify_edges=8 → final_watchlist=5
+
+#### Scenario: "Not extended" filter applied
+- **WHEN** a stock has a VCP pivot at 500 but current price is 560 (12% above pivot)
+- **THEN** the system SHALL remove it during the NARROW stage (>10% extended past pivot = not your trade)
 
 #### Scenario: Sector NARROW filter applied
-- **WHEN** 20 stocks pass the fundamental screen but only 6 of them are in leading sectors (top 30% by 6-month median return)
-- **THEN** the system SHALL narrow the candidate list to those 6 stocks before edge scoring
+- **WHEN** 55 stocks pass trend template but only 24 are in leading sectors (top 25%)
+- **THEN** the system SHALL narrow to those 24 before checking chart patterns
 
 #### Scenario: No stocks pass all filters
-- **WHEN** no stocks pass the Trend Template + VCP + CANSLIM combined criteria
-- **THEN** the system SHALL report watchlist_empty=true with the stage at which all candidates were eliminated
+- **WHEN** no stocks pass the full S.N.I.P.E. pipeline
+- **THEN** the system SHALL report an empty watchlist with stage counts showing where elimination occurred
+
+### Requirement: Universe Filters (S — SCAN)
+
+The system SHALL apply the following filters before Trend Template evaluation:
+- **Price Floor**: Current price > ₹50 (avoid penny stocks — manipulation, wide spreads)
+- **Market Cap Floor**: Market cap > ₹2,000 Cr (mid-cap and above — institutional participation)
+- **Liquidity**: Average daily volume > 5 lakh shares OR average daily turnover > ₹10 Cr
+
+#### Scenario: Penny stock filtered
+- **WHEN** a Nifty 500 constituent is trading at ₹35
+- **THEN** the system SHALL exclude it before any technical analysis
+
+#### Scenario: Illiquid stock filtered
+- **WHEN** a stock has 50-day average volume of only 80,000 shares and turnover of ₹2 Cr
+- **THEN** the system SHALL exclude it (fails both volume AND turnover thresholds)
+
+### Requirement: Dual-Timeframe Relative Strength
+
+The system SHALL compute RS percentiles on BOTH 3-month (63 days) and 6-month (126 days) timeframes. The combined RS for each stock SHALL be the MINIMUM of its 3-month and 6-month percentiles, ensuring the stock is strong on both timeframes.
+
+#### Scenario: Stock strong on both timeframes
+- **WHEN** a stock has 6-month RS percentile of 85 and 3-month RS percentile of 78
+- **THEN** the system SHALL assign combined RS = 78 (minimum of the two)
+
+#### Scenario: Recent weakness despite long-term strength
+- **WHEN** a stock has 6-month RS percentile of 90 but 3-month RS percentile of 45
+- **THEN** the system SHALL assign combined RS = 45 (recent weakness disqualifies it from leadership)
 
 ### Requirement: Sector Diversification in Final List
 
-The system SHALL enforce maximum 2 stocks from the same sector in the final 5-7 candidate list. If more than 2 top-ranked stocks are from the same sector, the system SHALL take the top 2 from that sector and fill remaining slots from the next-best stocks in other sectors.
+The system SHALL enforce maximum 2 stocks from the same sector in the final 5-7 candidate list. If more than 2 top-ranked stocks are from the same sector, the system SHALL take the top 2 and fill remaining slots from next-best stocks in other sectors.
 
 #### Scenario: Sector concentration override
-- **WHEN** the top 5 stocks by composite score are all from the IT sector
-- **THEN** the system SHALL select the top 2 IT stocks and fill positions 3-7 from the next-best stocks in other sectors
-
-#### Scenario: Diverse top list
-- **WHEN** the top 7 stocks come from 5 different sectors
-- **THEN** the system SHALL present all 7 without sector adjustment
+- **WHEN** the top 5 stocks by composite score are all from Capital Goods
+- **THEN** the system SHALL select the top 2 Capital Goods stocks and fill positions 3-7 from other sectors
 
 ### Requirement: Watchlist Output Format
 
 The system SHALL output the final watchlist with for each stock:
 - Rank (1-7)
-- Symbol and company name
+- Symbol
 - Sector and sector_trending flag (whether sector is in leading group)
 - Sector rank (percentile: 100 = best performing sector)
 - Current price
 - Pivot price (entry trigger)
-- Distance to pivot (%)
-- Stop loss level and distance (%)
+- Stop loss level (base_low or 8% below pivot, whichever is tighter)
 - Composite edge score
-- Edge count and which edges (including n_factor when at 52-week high)
-- Trend Template score
+- Edge count and which edges (including n_factor, alignment_bonus)
+- Trend Template score (must be 10/10)
 - VCP quality
-- CANSLIM score
-- Suggested position size (shares and value)
-- Risk:Reward ratio to first target
+- CANSLIM score and breakdown (C, A, N, S, L, I, M)
+- Position sizing (shares, value, risk%, R:R)
+- Stage (stage_2 or stage_2_early)
+- Breakout status (breakout_detected, approaching_breakout)
 
 The system SHALL also output sector_rankings metadata:
-- leading_sectors: list of sector names in top 30% by 6-month median return
+- leading_sectors: list of sector names in top 25% by 6-month median return
 - sector_returns: median 6-month return per sector
 
-#### Scenario: Watchlist display
-- **WHEN** the pipeline completes with 6 qualifying stocks
-- **THEN** the system SHALL output a formatted table/list with all fields above for each stock, sorted by composite score descending
+### Requirement: Score 0 = No Trade
 
-### Requirement: Daily Scan Execution
+The system SHALL NOT generate position sizing for any stock with edge_count=0. Per the framework: "No edges = NO trade." Position sizing SHALL return valid=false with reason="no_edges".
 
-The system SHALL support daily batch execution after market close (post 3:30 PM IST) to refresh the watchlist with latest price/volume data.
-
-#### Scenario: Daily refresh
-- **WHEN** the scan is triggered after market close
-- **THEN** the system SHALL use end-of-day closing prices and volumes for all calculations and output an updated watchlist
-
-#### Scenario: Intraday scan
-- **WHEN** a user manually triggers a scan during market hours
-- **THEN** the system SHALL use last traded price/current volume and flag results as "intraday_preliminary" (final confirmation requires EOD data)
-
-### Requirement: Historical Candidate Tracking
-
-The system SHALL maintain a log of stocks that appeared on the watchlist, including:
-- Date first appeared
-- Entry triggered (yes/no and date)
-- Outcome if entered (hit target / hit stop / still open)
-
-#### Scenario: Tracking a watchlist stock
-- **WHEN** stock XYZ appears on the watchlist on Monday with pivot at 500
-- **THEN** the system SHALL track whether price crossed 500 in subsequent days and log the outcome
+#### Scenario: Zero edges
+- **WHEN** a stock passes all filters but has 0 edges (volume is not HV1, RS not top 10%, not at 52W high, VCP not high quality, TT not 10/10)
+- **THEN** the system SHALL include it in the watchlist for monitoring but position_sizing SHALL be invalid with reason="no_edges"

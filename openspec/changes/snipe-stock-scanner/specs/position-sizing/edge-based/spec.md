@@ -4,9 +4,18 @@ Calculates position size and risk allocation for each trade based on the number 
 
 ## ADDED Requirements
 
+### Requirement: Score 0 = No Trade (PDF Page 14)
+
+The system SHALL reject any position where edge_count=0. Per the framework: "No edges = NO trade." When edge_count is 0, the system SHALL return valid=false with reason="no_edges" and shares=0.
+
+#### Scenario: Zero edges blocks trade
+- **WHEN** a stock qualifies for the watchlist but has 0 edges
+- **THEN** the system SHALL NOT generate a position size, returning reason="no_edges"
+
 ### Requirement: Edge-Based Risk Allocation
 
 The system SHALL determine the percentage of account equity to risk per trade based on edge count:
+- 0 edges: 0% — NO TRADE (see above)
 - 1 edge: 0.5% of account equity at risk
 - 2 edges: 1.0% of account equity at risk
 - 3 edges: 1.5% of account equity at risk

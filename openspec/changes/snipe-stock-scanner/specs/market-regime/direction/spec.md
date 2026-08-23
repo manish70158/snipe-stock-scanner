@@ -79,13 +79,13 @@ The system SHALL compute sector momentum rankings using the 6-month returns of a
 - Group all stocks (from the universe) by their sector classification
 - Compute the **median** 6-month return per sector (median is robust to outliers)
 - Rank sectors by median return (percentile: 100 = best, 0 = worst)
-- Sectors in the **top 30%** (configurable via `sector_leader_top_pct`) are classified as "leading"
+- Sectors in the **top 25%** (configurable via `sector_leader_top_pct`, PDF Page 19) are classified as "leading"
 
 The leading sector list is used by the NARROW stage of the pipeline to filter out stocks not in trending sectors.
 
 #### Scenario: Leading sectors identified
 - **WHEN** there are 20 sectors and their 6-month median returns are computed
-- **THEN** the system SHALL identify the top 6 sectors (30% of 20) as "leading" and output their names and returns
+- **THEN** the system SHALL identify the top 5 sectors (25% of 20) as "leading" and output their names and returns
 
 #### Scenario: Sector rankings output
 - **WHEN** sector rankings are computed

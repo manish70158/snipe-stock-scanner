@@ -4,26 +4,34 @@ Validates whether a stock meets the Mark Minervini 10-point Trend Template crite
 
 ## ADDED Requirements
 
-### Requirement: 10-Point Trend Template Validation
+### Requirement: SEPA Trend Template Validation (PDF Page 19)
 
-The system SHALL evaluate each stock against the following 10 criteria and report a pass/fail for each point plus an overall score (0-10):
+The system SHALL evaluate each stock against the 10-point SEPA Trend Template from the framework. "Every Criterion Must Be Met Before Any Entry."
 
-1. Current price above the 150-day (30-week) moving average
-2. Current price above the 200-day (40-week) moving average
-3. 150-day MA above the 200-day MA
-4. 200-day MA trending up for at least 1 month (22 trading days)
-5. 50-day MA above the 150-day MA
-6. 50-day MA above the 200-day MA
-7. Current price above the 50-day MA
-8. Current price at least 30% above the 52-week low
-9. Current price within 25% of the 52-week high
-10. Relative Strength ranking in the top 30% of the Nifty 500 universe
+**Technical Criteria (1-10, implemented as code checks C1-C10):**
 
-The system SHALL classify a stock as "Trend Template PASS" only when all 10 criteria are satisfied.
+Per PDF Page 19, the 10 criteria map to:
+1. Price above both 150-DMA (30W MA) and 200-DMA (40W MA) — Non-negotiable [code: C1 + C2]
+2. 150-DMA is ABOVE the 200-DMA — MAs in bullish order [code: C3]
+3. 200-DMA trending UP for at least 1 month (ideally 4-5 months) [code: C4]
+4. 50-DMA (10W MA) above both 150-DMA and 200-DMA [code: C5 + C6]
+5. Current price above 50-DMA [code: C7]
+6. Price at least 30% above 52-week low [code: C8]
+7. Price within 25% of 52-week high [code: C9]
+8. RS Rank: Top 30% minimum (dual-timeframe: min of 3-month and 6-month) [code: C10]
 
-#### Scenario: Stock passes all 10 criteria
-- **WHEN** a stock's price is above 50/150/200 DMA, all MAs are properly stacked and rising, price is ≥30% above 52W low, within 25% of 52W high, and RS is top 30%
+**Additional PDF Criteria (enforced via pipeline stages):**
+9. EPS growth ≥20% QoQ for at least 2 consecutive quarters — Fundamental strength driving institutional buying [enforced when data available via CANSLIM C criterion]
+10. Stock is in a leading sector (sector RS in top 25%) — Sector leadership multiplies individual stock's odds [enforced via NARROW sector filter]
+
+The system SHALL classify a stock as "Trend Template PASS" when all 10 technical criteria (C1-C10) are satisfied. Criteria 9 and 10 from the PDF are enforced at subsequent pipeline stages (NARROW) to allow graceful handling when EPS data is unavailable.
+
+Code implementation: 10 individual boolean checks (C1-C10), pass requires score=10.
+
+#### Scenario: Stock passes all 10 technical criteria
+- **WHEN** a stock's price is above 50/150/200 DMA, all MAs are properly stacked and rising, price is ≥30% above 52W low, within 25% of 52W high, and dual-timeframe RS is top 30%
 - **THEN** the system SHALL return trend_template_score=10 and trend_template_pass=true
+- **NOTE**: PDF criteria 9 (EPS) and 10 (sector) are additionally checked in the NARROW stage
 
 #### Scenario: Stock fails on MA slope criterion
 - **WHEN** a stock's 200-day MA has been declining over the past 22 trading days

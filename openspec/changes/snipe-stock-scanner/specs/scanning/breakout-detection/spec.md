@@ -55,3 +55,21 @@ The system SHALL identify stocks that are within 3% of their pivot point and hav
 #### Scenario: Stock too far from pivot
 - **WHEN** a VCP pivot is identified at 500 and the stock is at 460 (8% below)
 - **THEN** the system SHALL NOT flag approaching_breakout (distance exceeds 3% threshold)
+
+### Requirement: "Not Extended" Filter (FOMO Rule)
+
+The system SHALL exclude stocks that are more than 10% above their pivot price. Per the framework's cognitive bias rule: "If it's >10% extended past pivot, it's not your trade."
+
+This filter is applied during the NARROW stage of the pipeline to remove stocks where the optimal entry has been missed.
+
+#### Scenario: Stock too extended
+- **WHEN** a stock has a VCP pivot at 500 and current price is 560 (12% above pivot)
+- **THEN** the system SHALL exclude this stock from the watchlist (too extended, chasing risk)
+
+#### Scenario: Stock within acceptable range
+- **WHEN** a stock has a VCP pivot at 500 and current price is 530 (6% above pivot)
+- **THEN** the system SHALL include it (within 10% extended limit, still tradeable)
+
+#### Scenario: Stock below pivot (ideal)
+- **WHEN** a stock has a VCP pivot at 500 and current price is 490 (2% below pivot)
+- **THEN** the system SHALL include it as an approaching_breakout candidate (optimal entry zone)
