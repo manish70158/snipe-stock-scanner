@@ -98,8 +98,8 @@ jobs:
               # Scoring metrics table
               msg += "<b>📈 Scoring Metrics:</b>\n"
               msg += "<pre>\n"
-              msg += f"{'#':<2} {'Symbol':<10} {'Score':<5} {'TT':<5} {'VCP':<5} {'CAN':<4} {'Edg':<4} {'Stage':<8}\n"
-              msg += "-" * 48 + "\n"
+              msg += f"{'#':<2} {'Symbol':<10} {'Score':<5} {'TT':<5} {'VCP':<5} {'Edg':<4} {'Stage':<6}\n"
+              msg += "-" * 46 + "\n"
               for item in watchlist:
                   # Shorten stage name for table
                   stage_raw = item.get('stage', '?')
@@ -117,11 +117,41 @@ jobs:
                       f"{item.get('composite_score', 0):<5.0f} "
                       f"{item.get('trend_template_score', 0):<2}/10 "
                       f"{item.get('vcp_quality', 0):<2.0f}/10 "
-                      f"{item.get('canslim_score', 0):<1}/7 "
                       f"{item.get('edge_count', 0):<4} "
-                      f"{stage_short:<8}\n"
+                      f"{stage_short:<6}\n"
                   )
               msg += "</pre>\n\n"
+
+              # CANSLIM detail table
+              msg += "<b>📋 CANSLIM Breakdown:</b>\n"
+              msg += "<pre>\n"
+              msg += f"{'#':<2} {'Symbol':<10} {'C':>2} {'A':>2} {'N':>2} {'S':>2} {'L':>2} {'I':>2} {'M':>2}  {'Tot':<4}\n"
+              msg += "-" * 42 + "\n"
+              for item in watchlist:
+                  canslim = item.get("canslim_detail", {})
+                  def _mark(val):
+                      if val is True:
+                          return "✓"
+                      elif val == "data_unavailable":
+                          return "–"
+                      else:
+                          return "✗"
+                  c = _mark(canslim.get("C"))
+                  a = _mark(canslim.get("A"))
+                  n = _mark(canslim.get("N"))
+                  s = _mark(canslim.get("S"))
+                  l = _mark(canslim.get("L"))
+                  i = _mark(canslim.get("I"))
+                  m = _mark(canslim.get("M"))
+                  total = item.get("canslim_score", 0)
+                  msg += (
+                      f"{item.get('rank', ''):<2} "
+                      f"{item['symbol']:<10} "
+                      f"{c:>2} {a:>2} {n:>2} {s:>2} {l:>2} {i:>2} {m:>2}"
+                      f"  {total}/7\n"
+                  )
+              msg += "</pre>\n"
+              msg += "<i>C=Earnings A=Annual N=NewHigh S=Supply L=Leader I=Inst M=Market</i>\n\n"
 
               # Position sizing table
               msg += "<b>💰 Position Sizing:</b>\n"
