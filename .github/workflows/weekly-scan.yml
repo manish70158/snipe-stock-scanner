@@ -75,41 +75,29 @@ jobs:
           if not watchlist:
               msg += "⚠️ No candidates found this week.\n"
           else:
-              msg += "<b>🎯 Watchlist:</b>\n"
-              msg += "<pre>\n"
-              msg += f"{'#':<3}{'Symbol':<12}{'Score':<6}{'Edges':<6}{'Pivot':<8}{'Stop':<8}\n"
-              msg += "-" * 43 + "\n"
+              msg += "<b>🎯 Watchlist:</b>\n\n"
               for item in watchlist:
                   symbol = item['symbol']
-                  msg += (
-                      f"{item.get('rank', ''):<3}"
-                      f"{symbol:<12}"
-                      f"{item.get('composite_score', 0):<6.0f}"
-                      f"{item.get('edge_count', 0):<6}"
-                      f"{item.get('pivot_price', 0):<8.0f}"
-                      f"{item.get('stop_price', 0):<8.0f}\n"
-                  )
-              msg += "</pre>\n\n"
-
-              # Detail for top 3
-              msg += "<b>Top Picks Detail:</b>\n"
-              for item in watchlist[:3]:
+                  sector = item.get('sector', 'Unknown')
                   edges_str = ", ".join(item.get("edges", []))
                   sizing = item.get("position_sizing", {})
                   shares = sizing.get("shares", "N/A")
                   risk_pct = sizing.get("risk_percent", "N/A")
-                  symbol = item['symbol']
-                  sector = item.get('sector', 'Unknown')
-                  msg += (
-                      f"\n<b>{item.get('rank', '')}. {symbol}</b> ({sector})\n"
-                      f"  Price: Rs.{item.get('current_price', 0):.0f} | "
-                      f"Pivot: Rs.{item.get('pivot_price', 0):.0f} | "
-                      f"Stop: Rs.{item.get('stop_price', 0):.0f}\n"
-                      f"  Edges: {edges_str} | "
-                      f"TT: {item.get('trend_template_score', 0)}/10 | "
-                      f"VCP: {item.get('vcp_quality', 0):.0f}/10\n"
-                      f"  Size: {shares} shares @ {risk_pct}% risk\n"
-                  )
+
+                  # Targets from position sizing
+                  t1 = sizing.get("target_1", 0)
+                  t2 = sizing.get("target_2", 0)
+                  t3 = sizing.get("target_3", 0)
+
+                  msg += f"<b>{item.get('rank', '')}. {symbol}</b> ({sector})\n"
+                  msg += f"   Score: {item.get('composite_score', 0):.0f} | Edges: {item.get('edge_count', 0)} [{edges_str}]\n"
+                  msg += f"   CMP: Rs.{item.get('current_price', 0):.0f}\n"
+                  msg += f"   <b>Entry:</b> Rs.{item.get('pivot_price', 0):.0f}\n"
+                  msg += f"   <b>SL:</b> Rs.{item.get('stop_price', 0):.0f} ({sizing.get('stop_distance_pct', 0):.1f}%)\n"
+                  if t1:
+                      msg += f"   <b>T1:</b> Rs.{t1:.0f} | <b>T2:</b> Rs.{t2:.0f} | <b>T3:</b> Rs.{t3:.0f}\n"
+                  msg += f"   Qty: {shares} shares | Risk: {risk_pct}%\n"
+                  msg += "\n"
 
           msg += f"\n<i>Scan completed at {datetime.now().strftime('%H:%M UTC')}</i>"
 
